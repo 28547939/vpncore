@@ -1,4 +1,5 @@
 # vpndns
+FreeBSD jail "VPN core" architecture with "vpndns" DNS proxy
 
 TODO
 
