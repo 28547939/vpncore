@@ -1,0 +1,184 @@
+
+dns_listeners: 
+    - [ '192.168.1.3', 53 ]
+#    - [ '127.0.0.1', 53 ]
+
+##############################
+######## nameservers
+
+# Example:
+#
+# 192.168.100.0/24    VPN containers/nameservers
+# 192.168.2.0/24      Site A
+# 192.168.3.0/24      Site B
+# 192.168.1.0/24      Main network
+#
+# 192.168.1.3         vpndns instance (this program)
+#
+# -.-.-.1             Virtual bridge (on each network)
+#
+# All networks connected together to form a secure WAN using IPsec or similar
+
+# example:
+nameservers: 
+    # Main network 
+    # The DNS server servicing 192.168.100.0/24 can be configured to forward to the
+    #   vpndns instance, so that at least the DNS queries are protected, even if
+    #   hosts in 192.168.100.0/24 aren't accessing the internet through a VPN.
+    192.168.1.0/24: 192.168.100.10
+
+    # Example: Mobile IPsec connections without GRE
+    # In the vpndns core design, typically clients will connect directly to the VPN containers over 
+    # GRE and will request DNS through those containers' NAT, so that those requests are handled by 
+    # the entries under 'vpn_jail', below.
+    #
+    # But, when a client is not equipped locally with a GRE interface, their DNS requests may need
+    # to travel over the WAN directly to our vpndns instance.
+    # In those cases, we need to explicitly specify the VPN container to use for these requests.
+    #
+    # For example, a mobile client might have its Internet-bound traffic inserted into a GRE tunnel by 
+    # its IPsec endpoint, but depending on the IPsec configuration, a traffic selector might extract 
+    # WAN-bound traffic (including the DNS request) for re-encapsulation before the GRE redirection can 
+    # take place. So the DNS request arrives at our vpndns instance unencapsulated.
+    #
+    # Below, 192.168.10.0/29 is a mobile client (with multiple addresses available, in case)
+    # and 192.168.100.50 is the VPN container that the client's traffic is redirected to
+    192.168.10.0/29: 192.168.100.50
+    192.168.10.8/29: 192.168.100.51
+    192.168.10.16/29: 192.168.100.52
+    192.168.10.24/29: 192.168.100.53
+
+    # etc
+
+nameserver_default: 192.168.1.254
+
+
+# choose nameservers for requests based on regex on the requested domain
+# overrides choice made in "nameservers" above
+#
+#	Notes
+# 		The first match is chosen; the order of evaluation will depend on the 
+#		order that the entries are read from YAML
+#
+#		This can also be useful for directing requests to local DNS servers, especially
+#   		requests for domains in locally hosted zones
+#
+#	 	When the regex is something like ".+MY_DOMAIN$", this is similar to defining a 
+#   		forward-only zone in BIND (or any other DNS server software) for the zone MY_DOMAIN
+
+# format is regex: ns
+nameserver_regex:
+    '.+site-A.com$': 192.168.2.254
+    '.+site-B.com$': 192.168.3.254
+
+    # In the "vpncore" configuration, it's necessary to create an exception, as seen here,
+    # to allow the VPN software to properly resolve the VPN endpoint, since before connecting to the endpoint,
+    # it doesn't have access to the VPN's DNS resolution.
+    '.+my.corporate.vpn.net$': 1.1.1.1
+    '.+vyprvpn.com$': 1.1.1.1
+    '.+protonvpn.net$': 1.1.1.1
+
+
+
+# VPN containers' addresses
+# In the "vpncore" design, most DNS requests will be serviced by the rules generated here,
+# 	since most clients' requests are routed through the VPN containers and NATed.
+#
+# Requests coming from these addresses will be sent back to the same address;
+#	for now, there is no other meaning associated with this configuration item
+vpn_jail: 
+    - 192.168.100.48/28
+    - 192.168.100.64/28
+
+
+##############################
+######## output
+
+# write errors to a specific file 
+errorlog_file: '/home/vpndns/vpndns.log'
+
+# these two options concern both error and non-error output
+output_pipe: '/home/vpndns/vpndns.fifo'
+output_stdout: true
+
+
+##############################
+######## blocklists 
+
+
+# 127.0.0.1 blocking
+# This is the primary DNS blocking mechanism
+# blocklists are read from blocklist_dir; blocklists can be located anywhere under this 
+# directory, including in sub-directories, etc; they are all concatenated.
+# In those files, domains are specified one per line
+
+# For these domains, 127.0.0.1 is returned in response to A (IPv4) requests
+# If blocklist_only_a is true (default), other requests (AAAA, MX, etc) are given an empty response
+# As a result, the program won't report queries for these other record types as having been blocked;
+#	the query will just get an empty response.
+
+blocklist_dir: '/home/vpndns/dns/blocklists/'
+#blocklist_only_a: true
+
+# prints a dot to stdout for every 1000 entries read (default to true)
+#print_blocklist_read_progress: true
+
+
+# NXDOMAIN blocking
+# strictly speaking, not intended to be used for "blocking" as in "ad blocking";
+#   this is intended to be used to prevent spurious DNS requests, for example for 
+#	local domain names, domains names with invalid TLDs, domain names that have had
+#	the resolv.conf 'search' parameter appended due to inability to resolve, etc,
+#   from leaking out to the internet
+#
+# if "blocking" is desired to be done with NXDOMAIN instead of returning 127.0.0.1, an NXDOMAIN
+#   option should be integrated into the blocklist functionality in future work.
+nxdomain_regex:
+	# 'Block' domains ending in these TLDs
+    - '.+\.(attlocal|mynetwork|localdomain)$'
+
+
+##############################
+######## interface
+
+# a small HTTP server provides an interface to controlling the program while it's running;
+#   intended to allow configuration or general behavior to be changed without requiring a restart
+# interface_listen can have multiple entries.
+#
+# currently supported calls:
+#	POST  /blocklist/add_exception/$DOMAIN
+#	POST  /blocklist/del_exception/$DOMAIN
+#	GET   /blocklist/list_exceptions
+#	POST  /static_records/reload
+#
+#	TODO future work - /blocklist/reload 
+#
+interface_listen: 
+    - [ '127.0.0.1', 8080 ]
+    #- [ '0.0.0.0', 8080 ]
+    #- [ 'my.domain.com', 8080 ]
+
+
+##############################
+######## static DNS 
+
+
+# In case it's useful, it's also possible to resolve requests locally, at this server, instead 
+#   of forwarding.
+# In the static_records file, records are given one per line, formatted like:
+#   $DOMAIN $IPv4_ADDRESS
+i#
+# This can be useful for making some limited resolution available for local services, in case
+#   hosting a more sophisticated system, or a proper DNS server such as BIND, is not otherwise worth it.
+#
+# This functionality is currently limited to A records (and PTR records, for the given A records, which are 
+#	added automatically by default; this can be disabled below, but not on a per-domain basis)
+
+# Entries in this file take precedence over all other specifications of nameserver, and currently
+# it also takes precendence over all blocking.
+
+# Note also that requests for records which are not A or PTR will be given a blank reply (even if those records
+# exist in the public DNS)
+
+static_records: '/home/vpndns/dns/static.txt'
+#static_records_auto_ptr: true
