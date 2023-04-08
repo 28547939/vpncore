@@ -123,6 +123,12 @@ blocklist_dir: '/home/vpndns/dns/blocklists/'
 # prints a dot to stdout for every 1000 entries read (default to true)
 #print_blocklist_read_progress: true
 
+# Exempt certain clients from the blocklist entirely
+#client_exemptions:
+  #  - 1.2.3.4
+
+
+
 
 # NXDOMAIN blocking
 # strictly speaking, not intended to be used for "blocking" as in "ad blocking";
