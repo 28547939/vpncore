@@ -44,8 +44,6 @@ ipfw table intnet add $ifconfig_local
 ipfw table intnet add $vpnclient_a
 ipfw table intnet add $vpnclient_b
 
-intnet="$jladdr,$ifconfig_local"
-
 
 ipfw nat 1 config if $TUN log deny_in
 ipfw nat 2 config if $epair log \
@@ -54,7 +52,7 @@ ipfw nat 2 config if $epair log \
 ipfw nat 4 config if $epair log 
 
 
-# many programs will attempt to resolve independently of system-wide configuration, especially
+# some clients will attempt to resolve independently of system-wide configuration, especially
 # if resolution is failing; keep these entries here to prevent any of our intnet hosts from
 # doing this
 # The implications of failing to block such requests are not severe; the requests still go over the
@@ -67,7 +65,17 @@ ipfw table dns-block add 8.8.4.4
 ipfw table dns-block add 1.0.0.1
 
 
+# priv-dns table
 # hosts which are able to query our VPN provider's DNS (through our NAT port forward)
+# note this is different from the intnet, which contains hosts whose traffic is tunneled
+# 	into our container. 
+# 	That traffic is either directed through the tun interface to the VPN provider, or in 
+# 	the case of DNS, typically forwarded to the vpndns daemon ($vpndns) out through the 
+# 	container's external address, assuming the client has been configured to use $vpndns 
+# 	as its resolver.
+#
+# In contrast, priv-dns contains hosts which can issue DNS requests directly to our container's 
+# 	external address. Therefore it needs to contain $vpndns (or a subnet which contains $vpndns)
 ipfw table priv-dns create
 ipfw table priv-dns add 192.168.3.0/24
 ipfw table priv-dns add 192.168.2.0/24
