@@ -155,6 +155,7 @@ sub start {
                 'del_exceptions'    => 'del_exceptions',
                 'list_exceptions'    => 'list_exceptions',
                 'exists_exception'    => 'exists_exception',
+                'clear_exceptions'    => 'clear_exceptions',
             }
         ]
     );
@@ -237,6 +238,12 @@ sub list_exceptions {
     my ($k, $h) = @_[KERNEL, HEAP];
 
     return keys %$exceptions;
+}
+
+sub clear_exceptions {
+    my ($k, $h) = @_[KERNEL, HEAP];
+
+	$exceptions = {};
 }
 
 sub lookup_main {
@@ -568,6 +575,13 @@ sub start {
                                 $arg
                             ]);
                         }
+                    } elsif ($path =~ '/blocklist/clear_exceptions$') {
+                        my $arg = $1;
+                        if ($k->call('blocklist', 'clear_exceptions', $arg)) {
+                            &json_response($resp, 200, 0, 'success', {});
+						} else {
+                            &json_response($resp, 200, 1, "unknown error", {}); # TODO
+						}
                     } else {
                         &build_404($resp, '');
                     }
