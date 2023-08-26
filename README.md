@@ -13,7 +13,7 @@ interface; or it may be transparent to the client, with the ipsec container inse
 that it maintains.  
 It's also possible for clients to use the VPN containers only for DNS resolution.  
 
-Clients can also access internal "WAN" services ("internal WAN container"), of which their are many common examples: 
+Clients can also access internal "WAN" services ("internal WAN container"), of which there are many common examples: 
 mail servers, web servers, XMPP, file servers, media servers, virtual desktops, etc. Media servers that require multicast, such
 as Kodi and Plex, aren't compatible without extra work to configure multicast over the WAN. Audio servers such as Subsonic and Navidrome
 which operate over unicast are compatible.
