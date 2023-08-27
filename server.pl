@@ -169,7 +169,6 @@ sub read_list {
     my $stdout = \*STDOUT;
 
     my @rpz;
-    my $c = 0;
     L 'reading blocklist';
     eval {
         File::Find::find({
@@ -182,15 +181,31 @@ sub read_list {
                     return $e;
                 };
 
+		    	my $c = 0;
+
+				L sprintf("reading from blocklist file '%s'", $File::Find::name);
+
                 while (<$fh>) {
+                    chomp($_);
+
+					# skip comments
+					next if /^#/;
+
+					# skip blank lines (with possible whitespace)
+					next if /^\s*$/;
+
+
                     if ($print_progress == 1 && $c++ % 1000 == 0) {
                         print ".";
                         $stdout->flush;
                     }
 
-                    chomp($_);
+
                     push @rpz, $_;
                 }
+
+				print "\n";
+				L sprintf("read %d entries", $c);
 
             }
         }, $blocklist_dir);
@@ -243,7 +258,7 @@ sub list_exceptions {
 sub clear_exceptions {
     my ($k, $h) = @_[KERNEL, HEAP];
 
-	$exceptions = {};
+    $exceptions = {};
 }
 
 sub lookup_main {
@@ -579,9 +594,9 @@ sub start {
                         my $arg = $1;
                         if ($k->call('blocklist', 'clear_exceptions', $arg)) {
                             &json_response($resp, 200, 0, 'success', {});
-						} else {
+                        } else {
                             &json_response($resp, 200, 1, "unknown error", {}); # TODO
-						}
+                        }
                     } else {
                         &build_404($resp, '');
                     }
@@ -993,57 +1008,57 @@ sub dns_query {
         return;
     }
 
-	my $client_exemption = scalar grep { $_ eq $ip } @{ $self->{config}{client_exemptions} };
+    my $client_exemption = scalar grep { $_ eq $ip } @{ $self->{config}{client_exemptions} };
 
     ###
     my ($blocked, $block_type) = $k->call('blocklist', 'lookup', $q->qname);
     if (defined ($blocked) && $blocked == 1) {
-		if ($client_exemption > 0) {
-			L sprintf('%s blocked, but exemption in place for %s', $q->qname, $ip);
-			$blocked_response = undef; # should already be undef anyway
-		} else {
-			if ($block_type eq '127.0.0.1') {
+        if ($client_exemption > 0) {
+            L sprintf('%s in blocklist, but exemption in place for client %s', $q->qname, $ip);
+            $blocked_response = undef; # should already be undef anyway
+        } else {
+            if ($block_type eq '127.0.0.1') {
 
-				if ($self->{config}{blocklist_only_a} && not $q->qtype eq 'A') {
-					# Don't report the query as having been blocked
-					$k->yield('send_response', &build_empty($query_pkt, $context));
-					return;
-				}
+                if ($self->{config}{blocklist_only_a} && not $q->qtype eq 'A') {
+                    # Don't report the query as having been blocked
+                    $k->yield('send_response', &build_empty($query_pkt, $context));
+                    return;
+                }
 
-				my $pkt = $query_pkt->reply;
-				my $rr = Net::DNS::RR->new($q->qname .'. 0 A 127.0.0.1');
-				$rr->ttl(86400);
-				$rr->class('IN');
+                my $pkt = $query_pkt->reply;
+                my $rr = Net::DNS::RR->new($q->qname .'. 0 A 127.0.0.1');
+                $rr->ttl(86400);
+                $rr->class('IN');
 
-				$pkt->push(answer => $rr);
-				$pkt->header->ra(1);
-				$pkt->header->aa(1);
-				$pkt->header->rcode('NOERROR');
+                $pkt->push(answer => $rr);
+                $pkt->header->ra(1);
+                $pkt->header->aa(1);
+                $pkt->header->rcode('NOERROR');
 
-				$blocked_response = [
-					'127.0.0.1', 
-					{
-						host     => $q->qname,
-						type     => $q->qtype,
-						class    => $q->qclass,
-						context  => $context,
-						response => $pkt,
-						error    => "",
-					}
-				];
-			}
-			elsif ($block_type eq 'NXDOMAIN') {
+                $blocked_response = [
+                    '127.0.0.1', 
+                    {
+                        host     => $q->qname,
+                        type     => $q->qtype,
+                        class    => $q->qclass,
+                        context  => $context,
+                        response => $pkt,
+                        error    => "",
+                    }
+                ];
+            }
+            elsif ($block_type eq 'NXDOMAIN') {
 
-				$blocked_response = [
-					'NXDOMAIN', 
-					&build_nxdomain($query_pkt, $context),
-				];
-			} else {
-				EL sprintf('unrecognized block type %s for %s', $block_type, $q->qname);
-				return;
-			}
-		}
-	}
+                $blocked_response = [
+                    'NXDOMAIN', 
+                    &build_nxdomain($query_pkt, $context),
+                ];
+            } else {
+                EL sprintf('unrecognized block type %s for %s', $block_type, $q->qname);
+                return;
+            }
+        }
+    }
     ###
 
 #    die($k->call('blocklist', 'lookup', $q->qname));
@@ -1075,7 +1090,7 @@ sub dns_query {
       nameservers    => [ $nameserver ],
     );
 
-   	$response = $h->{resolver}->resolve( %query );
+       $response = $h->{resolver}->resolve( %query );
     $k->yield( 'send_response', $response ) if $response;
 }
 
@@ -1089,16 +1104,16 @@ sub udp_read {
     my $buf = '';
     my $sockaddr;
     { no warnings 'uninitialized';
-		while (defined($sockaddr = recv($socket, $buf, 8192, 0))) {
-			my ($port, $ip) = sockaddr_in($sockaddr);
-			my $ipstr = inet_ntoa($ip);
+        while (defined($sockaddr = recv($socket, $buf, 8192, 0))) {
+            my ($port, $ip) = sockaddr_in($sockaddr);
+            my $ipstr = inet_ntoa($ip);
 
-			$h->{clients}{"$ipstr:$port"} = "$server_ipstr:$server_port";
+            $h->{clients}{"$ipstr:$port"} = "$server_ipstr:$server_port";
 
-			my ($packet, $error) = Net::DNS::Packet->new(\$buf);
-			$packet->answerfrom("$ipstr:$port");
-			$k->yield('dns_query', $packet);
-		} 
+            my ($packet, $error) = Net::DNS::Packet->new(\$buf);
+            $packet->answerfrom("$ipstr:$port");
+            $k->yield('dns_query', $packet);
+        } 
     }
 
     return;
