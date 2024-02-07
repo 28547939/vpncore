@@ -1,2 +1,7 @@
 **/*.swo
 **/*.swp
+**/*.swo.*
+**/*.swp.*
+dynvpn/test/state/*
+dynvpn/global.yml
+dynvpn/local.yml

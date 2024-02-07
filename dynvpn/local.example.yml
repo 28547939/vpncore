@@ -1,0 +1,34 @@
+
+site_id: "host1"
+
+
+#script_path: "./scripts"
+script_path: "./test/scripts"
+
+# configure how often peers 'ping'/check one another
+# ( 
+#   check interval (how often to check; starts on receipt of response),  
+#   check timeout, 
+#   number of retries (timeouts) before marking as unavailable 
+# )
+# in seconds
+timers: 
+    host2: [5, 10, 3]
+
+
+# how long to wait after launch until checking and acting on peer state
+start_delay: 10
+
+# not yet implemented
+#failed_retry_timeout: 120
+#primary_override_online: False
+#primary_restart_timer: 300
+
+local_vpn_check_interval: 10
+
+# string value (anycast address) indicates a VPN which does not exist locally
+# [ local, anycast ] indicates a VPN which does exist locally
+vpn:
+    vpn1: [ '192.168.1.101', '10.0.254.101' ]
+    #vpn2: "10.0.254.2"
+

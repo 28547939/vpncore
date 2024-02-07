@@ -1,0 +1,29 @@
+
+# static configuration which is present on all nodes
+
+replica_priority:
+    vpn1:
+        - host1
+        - host2
+
+
+sites:
+    host1:
+        # dynvpn.py listen address
+        peer_addr: "192.168.1.254"
+        peer_port: 5000
+        gateway_addr: '192.168.1.1'
+
+        # VPNs which are present on this host
+        vpn:
+            - vpn1
+            
+
+
+    host2:
+        peer_addr: "192.168.2.254"
+        peer_port: 5000
+        gateway_addr: '192.168.2.1'
+        vpn:
+            - vpn1
+            
