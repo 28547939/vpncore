@@ -100,7 +100,8 @@ $add    97      allow tcp from any to $jladdr 22 setup keep-state
 
 $add    00100   nat 1 ip from any to any in via $TUN
 
-# repeat for 
+# repeat for each GR
+# TODO table-based
 $add    120     allow ip from any to any out xmit $GRE
 $add    121     allow ip from any to any in recv $GRE
 
