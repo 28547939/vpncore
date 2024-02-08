@@ -359,6 +359,15 @@ that is, when the container on one host fails and the corresponding container on
 another host is automatically activated, the BGP route is automatically 
 advertised on the new host instead of the old.
 
+Regarding routes, what we do specifically is set FRR to redistribute local 
+static routes (but not directly connected ones), and set a static route
+for the anycast address with next hop equal to the IPsec container's
+default gateway (which should be the host's virtual bridge). In this 
+configuration, the anycast addresses are on a distinct subnet from the
+host's `/24`, so the host has two virtual bridges, and conceptually, the
+main virtual bridge routes to the anycast bridge once the packet exits
+the IPsec container.
+
 This failover will inevitably mean that existing state, such as TCP connections,
 will need to be re-established, but this is unavoidable without the VPN service
 provider migrating the VPN session state over to the newly activated 
