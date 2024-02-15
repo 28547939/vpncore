@@ -187,19 +187,20 @@ specified in the FRRouting configuration.
 
 
 IPsec tunnel interface configuration:
-<pre>
-\# ifconfig ipsec1 create
-\# ifconfig ipsec1  tunnel 192.168.2.4 1.1.1.1 reqid 1
-\# ifconfig ipsec1 inet 192.168.2.4 192.168.1.4 netmask 255.255.255.255 
-\# ifconfig ipsec1
+
+```
+# ifconfig ipsec1 create
+# ifconfig ipsec1  tunnel 192.168.2.4 1.2.3.4 reqid 1
+# ifconfig ipsec1 inet 192.168.2.4 192.168.1.4 netmask 255.255.255.255 
+# ifconfig ipsec1
 ipsec1: flags=8051<UP,POINTOPOINT,RUNNING,MULTICAST> metric 0 mtu 1400
-        tunnel inet 192.168.2.4 --> 1.1.1.1
+        tunnel inet 192.168.2.4 --> 1.2.3.4
         inet 192.168.2.4 --> 192.168.1.4 netmask 0xffffffff
         groups: ipsec
         reqid: 1
         nd6 options=29<PERFORMNUD,IFDISABLED,AUTO_LINKLOCAL>
-</pre>
-`1.1.1.1` is the public address of the host that contains the `192.168.1.0/24`
+```
+`1.2.3.4` is the public address of the host that contains the `192.168.1.0/24`
 network. Our outer tunnel endpoint address is still `192.168.2.4` because the 
 packets will be processed by NAT when they leave the host.
 
