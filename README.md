@@ -6,7 +6,7 @@ Major components of this repository:
 
 * This document
 * Policy-based forwarding DNS server supporting blocklists and authoritative 
-`A` records (`vpndns`)	
+`A` and `PTR` records (`vpndns`), and caching based on TTL, with HTTP interface	
 * VPN connection/session failover system to monitor connection availability and update
 BGP anycast routes appropriately (`dynvpn.py`)
 * Various FreeBSD jail-related scripts which are used to 
@@ -56,7 +56,7 @@ Internet access is made available as a commercially available service.
 
 ### Overview
 
-![](img/overview.png)
+![](readme-img/overview.png)
 
 At a high level, the components of the system are the following:
 
@@ -394,7 +394,7 @@ server for resolution, in which case the server can configure the correct
 VPN container to forward requests to.
 
   
-![](img/host-detail.png)
+![](readme-img/host-detail.png)
   
 
 1. Incoming DNS request (UDP) encapsulated in GRE over IPsec (tunnel mode)
@@ -429,9 +429,52 @@ The VPN container's NAT table (from step (2)) translates the destination address
 
 
 
+#### HTTP API examples
 
+Currently a few different commands are available to make it possible to modify
+configuration and state without restarting the program.
 
+```
+# curl -X POST 127.0.0.1:8080/static_records/reload
+{
+   "message" : "completed",
+   "data" : {
+      "error" : [],
+      "total" : 10,
+      "successful" : 10
+   },
+   "is_error" : 0
+}
+# curl -X POST 127.0.0.1:8080/blocklist/add_exception/analytics.google.com
+{
+   "data" : {
+      "added" : "analytics.google.com"
+   },
+   "message" : "success",
+   "is_error" : 0
+}
+# curl -X GET 127.0.0.1:8080/blocklist/list_exceptions  # note - GET method
+{
+   "message" : "success",
+   "data" : {
+      "exceptions" : [
+         "analytics.google.com"
+      ]
+   },
+   "is_error" : 0
+}
+# curl -X POST 127.0.0.1:8080/blocklist/del_exception/analytics.google.com
+{
+   "is_error" : 0,
+   "data" : {
+      "deleted" : "analytics.google.com"
+   },
+   "message" : "success"
+}
 
+```
+
+See `vpndns/sample.yml` for full list of methods.
 
 
 

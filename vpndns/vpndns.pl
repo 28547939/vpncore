@@ -428,7 +428,7 @@ sub load {
         eval {
             my $a_rr = Net::DNS::RR->new(
                 owner   => $name,
-                ttl     => 86400,
+                ttl     => 1,
                 class   => 'IN',
                 type    => 'A',
                 address => $addr,
@@ -436,7 +436,7 @@ sub load {
             
             my $ptr_rr = Net::DNS::RR::PTR->new(
                 owner   => $addr,
-                ttl     => 86400,
+                ttl     => 1,
                 class   => 'IN',
                 type    => 'PTR',
             );
@@ -1068,7 +1068,7 @@ sub dns_query {
 
                 my $pkt = $query_pkt->reply;
                 my $rr = Net::DNS::RR->new($q->qname .'. 0 A 127.0.0.1');
-                $rr->ttl(86400);
+                $rr->ttl(1);
                 $rr->class('IN');
 
                 $pkt->push(answer => $rr);
@@ -1183,15 +1183,20 @@ sub send_response {
     # only schedule cache removal if it was not already in the cache
     if ($existing == 0 && not defined $response->{context}{local_authoritative}) {
         # for now, use the TTL from the first answer
-        my $answer = ($response->{response}->answer)[0];
 
-        #if (not defined $answer) {
-        #    EL sprintf('warning: response without any answer for %s %s', $response->{type}, $response->{host});
-        #} else {
-            my $ttl = $answer->ttl;
-            $k->delay_add('ttl_timeout', $ttl, $response->{type}, $response->{host});
-            L sprintf('send_response: setting ttl_timeout for %s %s to %d', $response->{type}, $response->{host}, $ttl);
-        #}
+        if (not defined $response->{response}) {
+            EL sprintf('warning: response without any response entry for %s %s', $response->{type}, $response->{host});
+        } else {
+            my $answer = ($response->{response}->answer)[0];
+
+            if (not defined $answer) {
+                EL sprintf('warning: response without any answer for %s %s', $response->{type}, $response->{host});
+            } else {
+                my $ttl = $answer->ttl;
+                $k->delay_add('ttl_timeout', $ttl, $response->{type}, $response->{host});
+                L sprintf('send_response: setting ttl_timeout for %s %s to %d', $response->{type}, $response->{host}, $ttl);
+            }
+        }
     }
 
 
