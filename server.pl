@@ -59,9 +59,10 @@ sub start {
             output    => sub {
                 my ($k, $h, $caller, $data) = @_[KERNEL, HEAP, SENDER, ARG0];
                 my $name = ($k->alias_list($caller))[0];
+                my $t = (POSIX::strftime '%Y-%m-%d_%H:%M:%S', localtime);
 
                 for my $fh (@{ $h->{output_fh} }) {
-                    print $fh "[$name] $data\n";
+                    print $fh "[$t][$name] $data\n";
                     $fh->flush;
                 }
             },
@@ -69,9 +70,10 @@ sub start {
             error    => sub {
                 my ($k, $h, $caller, $data) = @_[KERNEL, HEAP, SENDER, ARG0];
                 my $name = ($k->alias_list($caller))[0];
+                my $t = (POSIX::strftime '%Y-%m-%d_%H:%M:%S', localtime);
 
                 for my $fh (@{ $h->{error_fh} }) {
-                    print $fh "[$name] $data\n";
+                    print $fh "[$t][$name] $data\n";
                     $fh->flush;
                 }
                 
@@ -662,7 +664,7 @@ sub httpd_start {
 
     my @handlers = (
         [ '^/blocklist/.+'            => '/blocklist' ],
-        [ '^/static_records/.+'        => '/static_records' ],
+        [ '^/static_records/.+'       => '/static_records' ],
         [ '.+'                        => '/notfound' ],
     );
 
@@ -691,9 +693,9 @@ sub httpd_start {
             },
         ],
         ContentHandler    => {
-            '/notfound'                            => $callback->('notfound'),
-            '/blocklist'                        => $callback->('blocklist'),
-            '/static_records'                    => $callback->('static_records'),
+            '/notfound'             => $callback->('notfound'),
+            '/blocklist'            => $callback->('blocklist'),
+            '/static_records'       => $callback->('static_records'),
         }, 
     );
 }
@@ -804,8 +806,11 @@ sub start {
     my ($pkg, $config_path) = @_;
 
     my $self = bless {
-        config     => {},
-        ns        => {},
+        config  => {},
+        ns      => {},
+        # maps unique string key (query type concatenated with domain name) to response packet
+        # TODO - put this in a separate perl package so that we can query/modify it through the HTTP interface
+        cache   => {},
     }, 'vpndns::server';
 
     $self->{id} = $self->{config}{id};
@@ -814,7 +819,7 @@ sub start {
         args    => [ $config_path ],
         object_states => [
             $self => { '_start' => 'session_start', },
-            $self => [ qw(udp_read send_response dns_query listener_created listener_error ) ],
+            $self => [ qw(udp_read send_response dns_query ttl_timeout listener_created listener_error ) ],
         ],
         heap => {},
     )->ID();
@@ -903,6 +908,37 @@ sub listener_error {
     undef;
 }
 
+sub cache_key {
+    my ($type, $host) = @_;
+    return $type . $host;
+}
+
+sub ttl_timeout {
+    my ($k, $h, $self, $type, $host) = @_[KERNEL, HEAP, OBJECT, ARG0, ARG1];
+
+    EL sprintf('ttl_timeout: removed %s %s from cache', $type, $host);
+    delete $self->{cache}{&cache_key($type, $host)};
+}
+
+
+# $q is a Net::DNS::Question
+sub lookup_cache {
+    my ($self, $q) = @_;
+    return $self->{cache}{&cache_key($q->qtype, $q->qname)};
+}
+
+sub update_cache {
+    my ($self, $response) = @_;
+    my $key = &cache_key($response->{type}, $response->{host});
+    my $ret = 0;
+    if (defined $self->{cache}{$key}) {
+        $ret = 1;
+    }
+        
+    $self->{cache}{$key} = $response;
+    return $ret;
+}
+
 sub build_nxdomain {
     my ($query_pkt, $context) = @_;
     my ($q) = $query_pkt->question;
@@ -970,6 +1006,7 @@ sub dns_query {
     # RFC7719 section 3
     if (defined($k->call('static_records', 'lookup_a', $q->qname)) && not $q->qtype eq 'A') {
 
+        $context->{local_authoritative} = 1;
         $k->yield('send_response', &build_empty($query_pkt, $context));
         return;
     }
@@ -982,12 +1019,14 @@ sub dns_query {
             ($q->qtype eq 'A' && defined($rr = $k->call('static_records', 'lookup_a', $q->qname))) 
             or ($q->qtype eq 'PTR' && defined($rr = $k->call('static_records', 'lookup_ptr', $q->qname)));
         last) {
+
+        $context->{local_authoritative} = 1;
         
         my $resp;
         my $pkt = $query_pkt->reply;
         L sprintf('resolved %s -> %s using static_records', 
             $q->qname, 
-            ($q->qtype eq 'A' ? $rr->address : $rr->ptrdname));
+        ($q->qtype eq 'A' ? $rr->address : $rr->ptrdname));
 
         $pkt->push(answer => $rr);
         $pkt->header->ra(1);
@@ -1017,6 +1056,8 @@ sub dns_query {
             L sprintf('%s in blocklist, but exemption in place for client %s', $q->qname, $ip);
             $blocked_response = undef; # should already be undef anyway
         } else {
+            $context->{local_authoritative} = 1;
+
             if ($block_type eq '127.0.0.1') {
 
                 if ($self->{config}{blocklist_only_a} && not $q->qtype eq 'A') {
@@ -1034,6 +1075,7 @@ sub dns_query {
                 $pkt->header->ra(1);
                 $pkt->header->aa(1);
                 $pkt->header->rcode('NOERROR');
+
 
                 $blocked_response = [
                     '127.0.0.1', 
@@ -1074,11 +1116,18 @@ sub dns_query {
         return;
     }
 
+    if (defined (my $response = $self->lookup_cache($q))) {
+        $response->{context}{$_} = $context->{$_} for keys %$context; 
+        L sprintf('satisfying request from %s:%d for %s %s with cache', $ip, $port, $q->qtype, $q->qname);
+        $k->yield( 'send_response', $response );
+        return;
+    }
+
     my $nameserver = $self->lookup_ns($q->qname, $ip);
     $context->{ns} = $nameserver;
     my $response;
 
-    L $query_pkt->answerfrom. " => $nameserver : ". $q->qname;
+    L $query_pkt->answerfrom. " => $nameserver : ". $q->qtype ." ". $q->qname;
      
 
     my %query = (
@@ -1090,7 +1139,7 @@ sub dns_query {
       nameservers    => [ $nameserver ],
     );
 
-       $response = $h->{resolver}->resolve( %query );
+    $response = $h->{resolver}->resolve( %query );
     $k->yield( 'send_response', $response ) if $response;
 }
 
@@ -1128,6 +1177,23 @@ sub send_response {
         return;
     }
     my $context = $response->{context};
+
+    my $existing = $self->update_cache($response);
+
+    # only schedule cache removal if it was not already in the cache
+    if ($existing == 0 && not defined $response->{context}{local_authoritative}) {
+        # for now, use the TTL from the first answer
+        my $answer = ($response->{response}->answer)[0];
+
+        #if (not defined $answer) {
+        #    EL sprintf('warning: response without any answer for %s %s', $response->{type}, $response->{host});
+        #} else {
+            my $ttl = $answer->ttl;
+            $k->delay_add('ttl_timeout', $ttl, $response->{type}, $response->{host});
+            L sprintf('send_response: setting ttl_timeout for %s %s to %d', $response->{type}, $response->{host}, $ttl);
+        #}
+    }
+
 
     my ($af, $id, $ip, $port, $ns, $qname) = @{ $response->{context} }{ qw/af id ip port ns qname/ };
     my $packet = $response->{response};
