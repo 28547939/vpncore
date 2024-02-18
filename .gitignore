@@ -10,6 +10,8 @@ jail/scripts/additional-ipfw-tables.sh
 jail/scripts/openvpn-up.sh
 jail/etc/*-password.txt
 jail/etc/openvpn/*
+jail/etc/rc-conf/*
+!jail/etc/rc-conf/sample.conf
 jail/etc/vpn/*
 !jail/etc/vpn/sample
 jail/etc/vars.sh
