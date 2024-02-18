@@ -5,6 +5,14 @@ site_id: "host1"
 #script_path: "./scripts"
 script_path: "./test/scripts"
 
+# path in the VPN jail where shared configuration and scripts can be found
+#   (these are the scripts that are under the "jail" subdirectory of this
+#   repository)
+# this path is passed on to our shell scripts so that they can locate 
+#   the jail-related scripts from within the jail
+# this is the same variable as $LOCAL_VPN_DIR in the "jail" scripts
+local_vpn_dir: "/mnt/vpn"
+
 # configure how often peers 'ping'/check one another
 # ( 
 #   check interval (how often to check; starts on receipt of response),  

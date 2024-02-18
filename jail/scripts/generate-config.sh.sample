@@ -1,0 +1,22 @@
+#!/bin/sh
+
+set -o nounset
+
+# to be run inside a VPN jail
+# installation-specific - depends on how provider configuration is collected/stored/modified
+# this is one example
+
+VPN_HOSTNAME=$(hostname)
+
+. $(dirname $0)/common.sh
+
+read TUNID PROVIDER FILENAME < $LOCAL_VPN_DIR/etc/vpn/$VPN_HOSTNAME
+
+file="$LOCAL_VPN_DIR/etc/openvpn/$PROVIDER/$FILENAME"
+
+cat "$file" | \
+sed -Ee "s/^auth-user-pass[[:space:]]*$/auth-user-pass \/mnt\/vpn\/etc\/${PROVIDER}-password.txt /" | \
+sed -Ee "s/^dev tun[[:space:]]*$/dev tun${TUNID}/" 
+
+
+
