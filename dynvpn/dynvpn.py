@@ -474,6 +474,7 @@ class instance():
             os.path.join(self._script_path, f'vpn-set-online.sh'),
             v.id,
             str(v.local_addr),
+            self.local_config["local_vpn_dir"]
         )
 
         if ret != 0:
@@ -518,7 +519,6 @@ class instance():
         v=self.get_local_vpn(vpn_id)
         (ret, stdout, stderr)=await self._cmd(
             os.path.join(self._script_path, f'vpn-set-offline.sh'),
-            v.id,
             str(v.local_addr),
         )
 
@@ -735,7 +735,6 @@ class instance():
 
         (ret, stdout, stderr)=await self._cmd(
             os.path.join(self._script_path, 'vpn-check-online.sh'),
-            vpn_id,
             str(v.local_addr),
         )
 

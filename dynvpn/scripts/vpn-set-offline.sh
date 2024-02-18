@@ -3,10 +3,6 @@
 
 set -o nounset
 
-NAME=$1
-LOCAL_ADDR=$2
+LOCAL_ADDR=$1
 
-
-# each VPN jail has a "dynvpn" user
-ssh -i ~/.ssh/id.dynvpn $LOCAL_ADDR \
-	killall openvpn
+ssh -i ~/.ssh/id.openvpn -o StrictHostKeyChecking=off openvpn@$LOCAL_ADDR killall openvpn
