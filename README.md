@@ -367,7 +367,9 @@ default gateway (which should be the host's virtual bridge). In this
 configuration, the anycast addresses are on a distinct subnet from the
 host's `/24`, so the host has two virtual bridges, and conceptually, the
 main virtual bridge routes to the anycast bridge once the packet exits
-the IPsec container.
+the IPsec container. When `dynvpn.py` installs the local static route
+for the anycast address, FRR advertises it over BGP, making the VPN accessible
+to clients.
 
 This failover will inevitably mean that existing state, such as TCP connections,
 will need to be re-established, but this is unavoidable without the VPN service
@@ -547,4 +549,8 @@ will use it as its source address.
 
 ### Container setup: FreeBSD
 
-TODO
+Scripts and other configuration materials are available in the `jail` directory.
+This is not meant to be a complete, self contained system, but it provides 
+most of what is needed to start and operate the VPN jails using clones given 
+an existing base jail. This work is basically finished but is currently a work 
+in progress.
