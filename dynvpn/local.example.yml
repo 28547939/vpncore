@@ -1,6 +1,7 @@
 
 site_id: "host1"
 
+# separate set of scripts for testing
 
 #script_path: "./scripts"
 script_path: "./test/scripts"
@@ -10,7 +11,9 @@ script_path: "./test/scripts"
 #   repository)
 # this path is passed on to our shell scripts so that they can locate 
 #   the jail-related scripts from within the jail
-# this is the same variable as $LOCAL_VPN_DIR in the "jail" scripts
+#
+# this is the same variable as $LOCAL_VPN_DIR used by the 'jail' component
+# of this repository
 local_vpn_dir: "/mnt/vpn"
 
 # configure how often peers 'ping'/check one another
@@ -32,11 +35,13 @@ start_delay: 10
 #primary_override_online: False
 #primary_restart_timer: 300
 
+
+# how often to check connectivity on a local VPN session that is in the 
+# Online state
 local_vpn_check_interval: 10
 
 # string value (anycast address) indicates a VPN which does not exist locally
 # [ local, anycast ] indicates a VPN which does exist locally
 vpn:
     vpn1: [ '192.168.1.101', '10.0.254.101' ]
-    #vpn2: "10.0.254.2"
 
