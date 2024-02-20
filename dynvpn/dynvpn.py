@@ -35,6 +35,7 @@ class status(Enum):
     def __json__(self):
         return json.dumps(self.name)
 
+# see README.md in this directory for information about these states and their transitions
 class vpn_status(status):
     Online = auto()
     Replica = auto()
@@ -72,8 +73,6 @@ class vpn():
 
     status : vpn_status
 
-    #openvpn_process : asyncio.subprocess.Process
-
     def set_status(self, s : vpn_status):
         self.status=s
 
@@ -107,6 +106,8 @@ class site():
     """
     pull_interval : Optional[int]
     pull_timeout : Optional[int]
+
+    # not yet implemented
     #timeout_retries : Optional[int]
 
     def resolve_vpn_anycast(self, id : str) -> Optional[IPv4Address]:
@@ -276,13 +277,10 @@ class instance():
         
 
     """
+    Entry point to the instance after instantiation
     """
     async def start(self):
         # wait for online_delay, then start all VPNs where we have first replica
-
-        # no longer using    
-        #self._local_vpn_check_tg=asyncio.TaskGroup()
-
 
         # make our state available to other peers and listen for push_state
         await self.start_http_server()
@@ -315,6 +313,7 @@ class instance():
         self.ready=True
 
         # begin periodic state pull from peers
+        # TODO review Task, TaskGroup documentation to ensure they're handled cleanly through their entire lifecycle
         async with asyncio.TaskGroup() as tg:
             for (site_id, _) in self.sites.items():
                 if site_id != self.site_id:
@@ -323,26 +322,8 @@ class instance():
         #await asyncio.sleep(self.local_config.start_delay)
 
 
-
-
-
-    """
-    http
-
-    GET /pull_state
-        
-    
-    POST /push_state
-        Remote peer pushes state changes to us here
-
-
-    startup 
-        - each side does /pull_state after some random interval
-        - all local vpns start in state Pending 
-        - vpns where we are primary => attempt to start (TODO - openvpn option for retries); if failure, mark as offline (=> broadcast to peers)
-        - vpns where we are non-primary => remain in "pending" until notification of success/failure is received from node above us, or that node goes offline
-
-    """
+    def get_local_vpn(self, vpn_id : str):
+        return self.sites[self.site_id].vpn[vpn_id]
 
     # convert out state to JSON for transmission to a peer
     def _encode_state(self):
@@ -365,8 +346,12 @@ class instance():
         return d
 
 
-
-
+    """
+    Used by any part of the program to update the status of a local VPN (e.g. when coming online
+    or failing). 
+    
+    Unless broadcast=False, it will trigger an update to all peers
+    """
     async def _set_status(self, vpn_id : str, s : vpn_status, broadcast=True):
         self.sites[self.site_id].vpn[vpn_id].set_status(s)
         if broadcast:
@@ -374,8 +359,6 @@ class instance():
         
         return True
 
-    def get_local_vpn(self, vpn_id : str):
-        return self.sites[self.site_id].vpn[vpn_id]
 
 
     """
@@ -464,6 +447,8 @@ class instance():
 
 
     """
+        Start the local VPN session by calling the appropriate shell script, then check
+        for connectivity
     """
     async def _set_local_vpn_online(self, vpn_id : str) -> bool:
         # TODO loop for retries
@@ -529,9 +514,6 @@ class instance():
 
         # TODO error handling
 
-
-    async def vpn_offline(self, vpn_id : str):
-        pass
 
     async def vpn_online(self, vpn_id : str, broadcast : bool = True) -> Optional[bool]:
         vs=vpn_status
@@ -631,6 +613,7 @@ class instance():
             await self.handle_peer_vpn_status(site_id, vpn_id, status)
 
     """
+    Main entry point for handling state changes on peers
     """
     async def handle_peer_vpn_status(self, site_id : str, vpn_id : str, status : vpn_status):
         vs=vpn_status
@@ -675,28 +658,22 @@ class instance():
 
                 # come online if the offline node is directly above us, including when the the node is last
                 # in the list and we are first
+                # TODO handle the case where there are offline sites between us and failed site
                 else:
                     if d == 1 or (self.replica_priority[vpn_id][0] == self.site_id and self.replica_priority[vpn_id][-1] == site_id):
                         await self.vpn_online(vpn_id)
                         return
-
-                
-
-                # fail over to the first available VPN in the replica list
-                #for site_id in pri[vpn_id]:
-                #    if self.sites[site_id].vpn[vpn_id].available == True:
-                #        # only take action if we are the failover target
-                #        if site_id == self.site_id:
-                #            self._set_local_vpn_onoff(vpn_id, True)
 
             case (_, vs.Online):
 
                 d=self._replica_distance(site_id, self.site_id, vpn_id)
                 self._logger.info(f'handle_peer_vpn_status({vpn_id}@{site_id}): Online: replica distance is {d}')
 
-                # if it's higher priority
-                if d > 0:
+                if d is None:
+                    return
 
+                # currently, transition to Replica regardless of whether we are higher in the replica list
+                else:
                     # Pending -> Replica
                     # Online -> Replica
                     if self.get_local_vpn(vpn_id).status in \
@@ -707,17 +684,13 @@ class instance():
                     else:
                         return
 
-                else:
-                    return
 
+            # currently there is no need to handle these
             case (_, vs.Replica):
                 pass
 
             case (_, vs.Pending):
                 pass
-                # TODO
-
-
 
             # illegal transitions
             case (vs.Replica, vs.Failed):
@@ -751,56 +724,6 @@ class instance():
     def _handle_local_failure(self, v : vpn):
         self._set_status(v.id, vpn_status.Failed)
 
-
-
-async def main():
-
-    prs=argparse.ArgumentParser(
-        prog='',
-        description='',
-    )
-
-    prs.add_argument('--site-config-dir', required=True)
-    prs.add_argument('--local-config', required=True)
-
-    args=vars(prs.parse_args())
-
-    fmt=logging.Formatter(
-        datefmt='%Y-%m-%d_%H-%M-%S.%f'
-    )
-
-    logger=logging.getLogger()
-
-    logger.setLevel(logging.DEBUG)
-
-    lh=logging.StreamHandler()
-    lh.setFormatter(fmt)
-    logger.addHandler(lh)
-
-    # one file for main config, dir for remote sites, typically (not necessarily) one file per site
-
-
-    sites_in={}
-    local_in={}
-    for dirpath, _,  files in os.walk(args['site_config_dir']):
-        for filename in files:
-            if not (filename.endswith('.yml') or filename.endswith('.yaml')):
-                logger.debug(f"file {filename} skipped (filename isn't .yml)")
-                continue
-
-            path=os.path.join(dirpath, filename)
-
-            with open(path, 'rb') as f:
-                s=yaml.load(f)
-                sites_in.update(s)
-    
-    with open(args['local_config'], 'rb') as f:
-        local_in=yaml.load(f)
-    
-    sites={}
-
-    
-
 async def main():
 
     prs=argparse.ArgumentParser(
@@ -809,6 +732,7 @@ async def main():
     )
 
     prs.add_argument('--site-id', required=True)
+    #prs.add_argument('--local-config', required=True)
     args=vars(prs.parse_args())
 
 
