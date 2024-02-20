@@ -553,4 +553,4 @@ Scripts and other configuration materials are available in the `jail` directory.
 This is not meant to be a complete, self contained system, but it provides 
 most of what is needed to start and operate the VPN jails using clones given 
 an existing base jail. This work is basically finished but is currently a work 
-in progress.
+in progress, pending an unresolved FreeBSD issue involving tunnel creation/destruction.
