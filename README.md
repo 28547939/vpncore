@@ -168,7 +168,6 @@ more information.
 
 Some example configuration material is provided for StrongSwan: see
 `vpncore/swanctl.conf`. 
-TODO setkey.conf
 
 #### Configuration
 
