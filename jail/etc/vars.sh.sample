@@ -2,18 +2,18 @@
 
 export JAIL_BASE_PATH=/usr/jail
 export BASEJAIL_PATH=/usr/jail/basejail
-export ZFS_BASE=z21/jail
+export ZFS_BASE=zroot/jail
 
-export HOST_HOSTNAME="s21"
+export HOST_HOSTNAME="myhost"
 
 # for simplicity we assume the jail network is a /24, for both the 
 # "local" and "anycast" bridges
 # we also assume the local default route is .1
-export LOCAL_NET="192.168.21"
+export LOCAL_NET="192.168.1"
 export LOCAL_NETMASK="255.255.255.0"
 export ANYCAST_NETMASK="255.255.255.0"
 export ANYCAST_NET="10.0.254"
-export LOCAL_GATEWAY="192.168.21.1"
+export LOCAL_GATEWAY="192.168.1.1"
 
 # numeric VPN 
 export VPN_ID_OFFSET=50

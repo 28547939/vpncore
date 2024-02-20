@@ -1,0 +1,10 @@
+# add this to the end of the host's /etc/devfs.rules to make this ruleset accessible
+# to the jail system
+
+[devfsrules_jail=5]
+add include $devfsrules_hide_all
+add include $devfsrules_unhide_basic
+add include $devfsrules_unhide_login
+add path bpf unhide
+add path tun* unhide
+add path bpf0 unhide
