@@ -935,7 +935,12 @@ sub update_cache {
         $ret = 1;
     }
         
-    $self->{cache}{$key} = $response;
+    if (defined $response->{error} and $response->{error} ne 'NOERROR') {
+        L sprintf('update_cache: ignoring %s due to error in response', $key);
+    } else {
+        $self->{cache}{$key} = $response;
+    }
+
     return $ret;
 }
 
