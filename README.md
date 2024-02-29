@@ -73,7 +73,7 @@ separate machine on the LAN represented by the host's virtual network
 * Clients, which can each either be a container on some host, or an Internet-connected
 device such as laptop or mobile phone capable of dialing into the network directly
 (via IPsec or otherwise). 
- * Clients are just those things which, roughly, have IP connectivity with the WAN
+  * Clients are just those things which, roughly, have IP connectivity with the WAN
 and act as clients to a host's containers in some way, whether a VPN container
 or otherwise.
 
@@ -82,10 +82,10 @@ Containers can be categorized as follows:
 
 1. **IPsec container**: each host has a unique IPsec container which connects the
 host's internal network to other hosts via site-to-site IPsec tunnel(s).
- * The IPsec container, with its own virtual network stack like any other container,
+   * The IPsec container, with its own virtual network stack like any other container,
 acts as a router for the host and its containers: packets to and from remote
 sites pass through the container in both directions.
- * If VPN failover/high availability is desired between hosts, a `dynvpn.py` 
+   * If VPN failover/high availability is desired between hosts, a `dynvpn.py` 
 instance on each host's IPsec container manages the election of a primary
 for each VPN instance and communicates anycast routing changes to the local
 BGP daemon via static route.
@@ -93,19 +93,19 @@ BGP daemon via static route.
 2. **VPN containers**: providing Internet connectivity to clients via an external
 VPN connection, such as OpenVPN or Wireguard. Generally, client traffic
 is directed into the VPN container via GRE route or SOCKS connection.
-* **`vpndns` container**: each host as a unique `vpndns` container, 
+   * **`vpndns` container**: each host as a unique `vpndns` container, 
 running a `vpndns` instance, which forwards DNS
 requests (originating from that host or from elsewhere) to VPN containers on 
 that host, based on policy.
 It also supports other functionality - see below.
 An implementation is included in this repository.
-* **Internal/WAN services**: services which are not necessarily connected to the Internet but
+3. **Internal/WAN services**: services which are not necessarily connected to the Internet but
 which are accessible across the WAN (labeled "Internal WAN container" above).
-* Other containers: whatever other containers the host might have.
+4. Other containers: whatever other containers the host might have.
 
 
 
-The first four container types are discussed in the following sections.
+These four container types are discussed in the following sections.
 
 
 ### I. IPsec containers
@@ -222,26 +222,26 @@ Different types of clients will have different capabilities as far as setting
 their default route through the VPN container. Options include the following:
 
 * Policy route through GRE tunnel somewhere along the path
- * Some clients don't have any specific capability to establish a tunnel. In 
+  * Some clients don't have any specific capability to establish a tunnel. In 
 this case one option is to install a policy route on a layer-3 hop that
 has the GRE tunnel installed. 
- * Typically this will happen relatively close
+  * Typically this will happen relatively close
 to the client, such as in the first-hop IPsec container  to ensure the 
 Internet-bound traffic is forwarded over the tunnel.
- * This option is common for mobile devices, where it is more difficult
+  * This option is common for mobile devices, where it is more difficult
 to install and configure a GRE tunnel.
 
 * Local GRE tunnel
- * This is the same as the above, except the client has the GRE tunnel
+  * This is the same as the above, except the client has the GRE tunnel
 installed locally.
 
 * SOCKS proxy
- * This is an option for clients which can't use a tunnel (for example an
+  * This is an option for clients which can't use a tunnel (for example an
 unprivileged process which can SSH but can't configure interfaces or modify
 the local routing table). It's also an option when more granularity is desired,
 e.g. a device accesses the Internet through one tunnel but specific applications
 on that device use another tunnel over SOCKS.
- * The VPN container will need to be configured for SOCKS (for example with
+  * The VPN container will need to be configured for SOCKS (for example with
 an SSH server)
 
 
@@ -337,7 +337,8 @@ and that address is advertised over BGP. If all such addresses are advertised
 at once, the resulting setup has a load balancing effect where clients are 
 directed to the container with the shortest path. But this is not appropriate 
 if containers maintain per-client state unless that state is synchronized
-across replicas as needed. 
+across replicas as needed, unless it can be guaranteed that shortest
+paths will not change except as a result of failure.
 
 In the case of VPN containers, the containers do maintain a kind of state
 for clients, which essentially comes down to the OpenVPN or Wireguard association
@@ -505,11 +506,11 @@ general remote storage of small documents, e.g. sharing URL from a mobile phone
 web browser to consult later
 * XMPP: secure communication; no need to back up chat transcripts when the instance
 already stores them locally
-* Virtual desktops: containers running a VNC server; this benefits from 
+* Virtual desktops: containers (or VMs) running a VNC server; this benefits from 
 local access to the host's storage and services, and the ability to maintain 
 long-running desktop state (e.g. open windows/work flow), so long as the host is 
 running.
- * Virtual desktops are an example of a container which would benefit from using a
+  * Virtual desktops are an example of a container which would benefit from using a
 VPN container for its Internet connection, typically via GRE. "Blank-slate" 
 Internet-enabled virtual desktops are an ongoing area of work already for
 privacy, convenience, and productivity reasons, e.g. Kasmweb and others.
@@ -541,8 +542,8 @@ TODO: More details, config
 2. Install and configure VNC (`net/tigervnc-server`)
 3. Install GRE tunnels and policy routes (`ipfw fwd`)
 4. Install "dummy" `bridge` interface and set default route through it
- * Since this is a local interface and it's the default route, outgoing packets 
-will use it as its source address. 
+   * Since this is a local interface and it's the default route, outgoing packets 
+will use it as its source address, simplifying routing and configuration.
 5. Add route(s) and modify ACLs in VPN container for jail desktop
 
 
