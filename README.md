@@ -28,12 +28,14 @@ design can also be supported on Linux without issue.
 
 Clients are
 configured statically with default routes through GRE, or their traffic is directed by policy route 
-on their first hop router through a GRE tunnel on the router, to access default routes provided
+through a GRE tunnel on a router somewhere the default route, to access default routes provided
 by the remote tunnel endpoints (residing on "VPN containers").
 
-Tunnel endpoints ("VPN containers") on remote hosts are accessed over the WAN, 
+GRE tunnel endpoints (inside "VPN containers") on remote hosts are accessed over the WAN, 
 and the endpoint addresses can be
-anycast to take advantage of routing failover (BGP). Endpoint containers ("VPN containers") use OpenVPN or Wireguard
+anycast to take advantage of routing failover among multiple instances when using BGP to advertise the addresses
+(but see the discussion below under `dynvpn.py`).
+Endpoint containers ("VPN containers") use OpenVPN or Wireguard
 to connect the clients to the Internet, and the containers use NAT to decouple client resolver configuration
 from the dynamic resolver config obtained from the VPN provider.
 
@@ -47,12 +49,8 @@ Certain parts of the configuration can be modified over HTTP API, such as blockl
 It also provides very basic authoritative DNS server functionality in case it doesn't make sense to run a
 proper DNS server.
 
-
 Throughout this document, the term `VPN` is intended to refer to a connection through which
 Internet access is made available as a commercially available service.
-
-
-
 
 ### Overview
 
@@ -69,10 +67,10 @@ NAT.
 * Containers, each having its own IP address on a host's internal virtual network; 
 each container has its own virtual network stack
 (using a Linux network namespace or FreeBSD VNET setting), as if it were a 
-separate machine on the LAN represented by the host's virtual network
+separate machine on the LAN represented by the host's virtual network.
 * Clients, which can each either be a container on some host, or an Internet-connected
 device such as laptop or mobile phone capable of dialing into the network directly
-(via IPsec or otherwise). 
+(via IPsec or otherwise).
   * Clients are just those things which, roughly, have IP connectivity with the WAN
 and act as clients to a host's containers in some way, whether a VPN container
 or otherwise.
@@ -105,7 +103,7 @@ which are accessible across the WAN (labeled "Internal WAN container" above).
 
 
 
-These four container types are discussed in the following sections.
+The first three container types are discussed in the following sections.
 
 
 ### I. IPsec containers
@@ -118,7 +116,7 @@ host's `bridge` interface.
 It has an IP 
 address on the host's network like any other container, and it's not actually
 directly connected to the Internet - it uses the host's NAT
-(forwarding UDP ports `500` and `4500`. 
+(forwarding UDP ports `500` and `4500`).
 
 In other words, 
 IPsec processing takes place inside the container, and the site-to-site tunnel
@@ -132,7 +130,8 @@ In a route-based configuration, the operating system represents
 the ingress and egress of tunneled packets as taking place inside virtual 
 interfaces (`ipsecN`, for some number `N`). Traffic is directed into the tunnel
 using the routing table (in this case the IPsec container's routing
-table). 
+table). For example, a remote site's `/24` would be routed through the `ipsec`
+tunnel interface.
 
 The alternative approach is the "policy-based" configuration, where IPsec
 traffic selector policies are installed (by StrongSwan), without the 
@@ -161,9 +160,7 @@ by the traffic selector. This needs to be accomplished in the firewall instead.
 
 
 
-
-See [https://docs.strongswan.org/docs/5.9/features/routeBasedVpn.html]
-(https://docs.strongswan.org/docs/5.9/features/routeBasedVpn.html) for 
+See [https://docs.strongswan.org/docs/5.9/features/routeBasedVpn.html](https://docs.strongswan.org/docs/5.9/features/routeBasedVpn.html) for 
 more information.
 
 Some example configuration material is provided for StrongSwan: see
@@ -179,9 +176,10 @@ provided)
 (Linux), to create necessary GRE and IPsec tunnel interfaces.
 3. Routing: in this design, FRR adds local routes for other hosts on the
 WAN automatically using BGP. 
-Routes (aside from the host's `/24`) that need to be accessible to other hosts
+Routes that need to be accessible to other hosts
 on the WAN should either be configured statically (e.g. in `rc.conf.local`) or
-specified in the FRRouting configuration.
+specified in the FRRouting configuration. A sample configuration is provided in
+`misc/bgpd.conf`.
 
 
 
@@ -189,7 +187,7 @@ IPsec tunnel interface configuration:
 
 ```
 # ifconfig ipsec1 create
-# ifconfig ipsec1  tunnel 192.168.2.4 1.2.3.4 reqid 1
+# ifconfig ipsec1 tunnel 192.168.2.4 1.2.3.4 reqid 1
 # ifconfig ipsec1 inet 192.168.2.4 192.168.1.4 netmask 255.255.255.255 
 # ifconfig ipsec1
 ipsec1: flags=8051<UP,POINTOPOINT,RUNNING,MULTICAST> metric 0 mtu 1400
@@ -201,7 +199,7 @@ ipsec1: flags=8051<UP,POINTOPOINT,RUNNING,MULTICAST> metric 0 mtu 1400
 ```
 `1.2.3.4` is the public address of the host that contains the `192.168.1.0/24`
 network. Our outer tunnel endpoint address is still `192.168.2.4` because the 
-packets will be processed by NAT when they leave the host.
+packets will be processed by NAT when they leave the local host.
 
 It's worth noting that the netmask needs to be `255.255.255.255`. This prevents
 the remote `/24` from being directly connected in our routing table; if it is,
@@ -223,8 +221,8 @@ their default route through the VPN container. Options include the following:
 
 * Policy route through GRE tunnel somewhere along the path
   * Some clients don't have any specific capability to establish a tunnel. In 
-this case one option is to install a policy route on a layer-3 hop that
-has the GRE tunnel installed. 
+this case one option is to install a policy route somewhere along the default 
+route where the GRE tunnel is installed.
   * Typically this will happen relatively close
 to the client, such as in the first-hop IPsec container  to ensure the 
 Internet-bound traffic is forwarded over the tunnel.
@@ -281,14 +279,12 @@ documentation, Windows systems are generally compatible.
 
 #### Container firewall and policy with `ipfw`
 
-An example `ipfw` configuration is provided in this repository. It incorporates
-the features that are discussed in this document.
+An example `ipfw` configuration, for VPN containers, is provided in this repository. 
+It incorporates the features that are discussed in this document.
 
 
 
 
-
-##### 
 
 ### RE: `dynvpn.py` and high availability for I and II (containers and hosts)
 
@@ -303,15 +299,13 @@ BGP can be used to install appropriate routes automatically.
 IPsec containers on each host are directly connected over IPsec tunnel, and 
 BGP sessions are established over the IPsec tunnel's single hop. 
 `FRRouting` is one option for 
-a BGP server, and we provide a sample configuration in `config/bgpd.conf`.
+a BGP server, and we provide a sample configuration in `misc/bgpd.conf`.
 
 Unless the WAN topology is a full mesh, packets from client to container will 
 often be traversing multiple hosts (i.e. multiple IPsec containers and their
 associated tunnels). If a host or a link between hosts becomes unavailable, BGP 
 instances running in the IPsec containers will change routes automatically
 (after a small delay) to direct traffic across available routes. 
-
-
 
 This failover mechanism does not pertain specifically to VPN containers 
 (which is covered next), but to the hosts and their internal network all 
@@ -322,7 +316,7 @@ together.
 #### High availability: container availability - anycast
 
 Individual containers can become unavailable on the network for a variety of reasons.
-Without consideration for the applications running in the container, 
+Regardless of the applications running in the container, 
 various general conditions result in non-availability: the container actually
 being stopped/shut down, the container's `epair` (or `veth` on Linux) interface
 failing or being removed, a firewall problem on the host's internal network, etc.
@@ -336,14 +330,14 @@ for containers: all replicas of the container have the same (anycast) address,
 and that address is advertised over BGP. If all such addresses are advertised
 at once, the resulting setup has a load balancing effect where clients are 
 directed to the container with the shortest path. But this is not appropriate 
-if containers maintain per-client state unless that state is synchronized
-across replicas as needed, unless it can be guaranteed that shortest
-paths will not change except as a result of failure.
+if containers maintain per-client state (unless that state is synchronized
+across replicas as needed), unless it can be guaranteed that shortest
+paths will not change except as a result of container failure.
 
 In the case of VPN containers, the containers do maintain a kind of state
 for clients, which essentially comes down to the OpenVPN or Wireguard association
 with the remote end of the VPN session (and ultimately, the public IP address
-assigned by the service provider along with any layer 4 flow-related state
+assigned by the service provider along with any flow-related state
 along the path). As a result, packets within each flow need to travel through
 the same VPN container. This, along with the fact that service providers 
 generally limit the number of active VPN sessions, means that
@@ -389,7 +383,8 @@ resolver configuration.
 VPN container clients statically configure the address of the `vpndns` server as
 their resolver. Typically, clients route their access to the server through
 their route to the VPN container, so that the VPN container itself is automatically 
-chosen by the server to handle the request (see details below).
+chosen by the server to handle the request (because of NAT to the container's 
+jail address; see details below).
 
 Clients which are not interacting with VPN containers can still use the `vpndns`
 server for resolution, in which case the server can configure the correct 
@@ -404,12 +399,13 @@ VPN container to forward requests to.
 The VPN container routes the underlying DNS request to the `vpndns` container;
 the source address is translated to 10.10.1.2, the VPN container's own address on the bridge, with NAT.
 3. `vpndns` instance listening on UDP port 53 receives the DNS request, applies processing (such as blocklist lookup),
-and looks up the forwarder (i.e. DNS server to service the request with) based on the source address (10.10.1.2).   
-In the standard configuration, the source -> forwarder map is an identity for VPN containers.
+and looks up the DNS server to service the request with based on the source address (10.10.1.2).   
+In the standard configuration, the source -> server map is an identity for VPN containers.
 4. Therefore, the `vpndns` container sends the DNS request back into the VPN container (to resolve the request using that 
 VPN container's remote endpoint's DNS server)
 5. NAT on the VPN container is configured with port forwarding, to redirect incoming UDP on port 53 
-to the external VPN's remote endpoint on the TUN interface (which is configured at tunnel setup time), or whatever
+to the external VPN's remote endpoint address on the TUN interface (which is configured dynamically whenever the VPN session
+is (re-)initiated), or whatever
 other DNS server address has been provided by the external VPN service.  
 Due to this NAT, the `vpndns` instance is not aware of the possibly dynamically configured address of the DNS server
 used by the VPN container.  
@@ -493,7 +489,7 @@ Internet-facing. Essentially, as far as the WAN services are concerned,
 all Internet-facing 
 security considerations are taken care of at once by IPsec.
 
-The reality is inevitably more complex when multiple users are involved or when
+But the reality is inevitably more complex when multiple users are involved or when
 certain services are more trusted than others, especially when it comes to services
 which access the Internet. Threats can also arise from within the WAN.
 Firewalls/ACLs on the host can go a long way in this 
