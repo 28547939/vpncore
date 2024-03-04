@@ -477,6 +477,19 @@ See `vpndns/sample.yml` for full list of methods.
 
 
 
+#### Dependencies (Perl)
+
+Currently the program is written in Perl. It has the following dependencies.
+In the future, it may be rewritten in another language. Dependencies can be
+installed with `cpan`. The author prefers to build Perl programs into 
+executables using the "PAR Packer" ([https://metacpan.org/pod/pp](https://metacpan.org/pod/pp))
+in a separate sandboxed environment that has needed CPAN modules installed, 
+followed by deployment.
+
+* `POE` (including `POE::Kernel`, `POE::Session`, etc, which should be among
+its dependencies)
+* `YAML::XS` (we should probably change this to `YAML::Any`)
+
 
 
 ### IV. Internal/WAN services
