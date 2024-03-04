@@ -47,12 +47,16 @@ sub start {
                 $k->alias_set('log');
 
                 if (defined $config{output_pipe}) {
+# TODO not yet implemented
 #                    push $h->{output_fh}, 
                 } 
                 
                 if (defined $config{output_stdout} && $config{output_stdout} == 1) {
                     push @{ $h->{output_fh} }, \*STDOUT;
-                    push @{ $h->{error_fh} }, \*STDOUT;
+                }
+
+                if (defined $config{output_stderr} && $config{output_stderr} == 1) {
+                    push @{ $h->{error_fh} }, \*STDERR;
                 }
             },
 
