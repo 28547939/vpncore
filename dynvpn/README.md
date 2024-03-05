@@ -75,7 +75,7 @@ Pending:
     Pending -> Offline:
         not possible
 
-        #TODO alterantive future option:
+        #TODO alternative future option:
         #    when a primary comes online and learns that a replica is already online, and `primary_override_online`
         #    is False, it will transition from its initial Pending state to Offline...
         #    
@@ -92,21 +92,19 @@ Failed:
     When other sites hear of this, the next-highest replica site for this VPN will attempt to bring it online.
 
     Failed -> Offline: 
-        Currently this is not possible. Optionally, in the future, it will be possible to transition to Offline
-        after time has elapsed, if a replica has come Online.
-        For now, we remain in the Failed state to make it clear that failure occurred.
-
-        #TODO future work: 
-        #    optionally, after `primary_restart_timer`, transition Offline -> Pending and try again, as above; when we come online, 
-        #    any online replica will shut off its connection and transition to Replica state
+        After entering the Failed status, attempt to transition to Offline after `failed_status_timeout` seconds 
+        have elapsed, but only if another replica is Online. 
+        If not, continue to retry entering Offline every `failed_status_timeout` seconds.
+        If `failed_status_timeout` is 0, remain in Failed forever.
 
     Failed -> Pending:
         - If there are no available replicas (according to our configuration), immediately attempt to come online again
         - If the replica directly above us in the replica list (ignoring any offline sites) fails, we attempt
             to come online, even though we have already failed
-        
+
         # TODO not yet implemented:
-        #   - Optionally, after a certain timeout (failed_retry_timeout), if we are still Failed, enter Offline state
+        #   - Optionally, after a certain timeout (failed_retry_timeout), if we are still Failed, retry bringing the VPN
+        #       back online regardless of any other online replicas
 
 
 
