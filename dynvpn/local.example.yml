@@ -35,6 +35,11 @@ start_delay: 10
 #primary_override_online: False
 #primary_restart_timer: 300
 
+# VPN transitions to Offline status after being in Failed for this many seconds,
+# assuming a replica has come online; if not, it will continue trying to go offline
+# indefinitely
+# 0 seconds => never timeout
+failed_status_timeout: 0
 
 # how often to check connectivity on a local VPN session that is in the 
 # Online state
@@ -44,4 +49,5 @@ local_vpn_check_interval: 10
 # [ local, anycast ] indicates a VPN which does exist locally
 vpn:
     vpn1: [ '192.168.1.101', '10.0.254.101' ]
+
 
