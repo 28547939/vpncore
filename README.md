@@ -211,13 +211,55 @@ path on the WAN thanks to BGP in case the link fails.
 The `reqid` parameter can be arbitrary and just needs to be equal to the 
 parameter in the StrongSwan configuration (see example `swanctl.conf`).
 
+
+
+#### Clients: Apple devices
+
+Based on limited experimentation, and without having done any further research,
+ the following appears to be true about Apple systems.
+
+* It appears that current generation iOS/macOS does not allow users to connect 
+to VPNs unless those VPNs are registered with/approved by Apple. This appears 
+to rule
+out using newer Apple devices with the self-hosted setup configuration
+described here, when connecting directly to the WAN.
+* iOS releases from
+approximately 10 or more years ago, and macOS/Mac OS X up until the current
+generation, support IPsec VPN connections with certain additional requirements
+and limitations which are generally documented by Apple or made clear in
+the user interface.
+* iOS releases newer than the cohort discussed above (approx. 10+ years old),
+but not in the cohort of current/recent generation releases, cannot connect to IPsec 
+VPNs without a `mobileconfig` configuration, and they enforce undocumented
+requirements on things like certificates. 
+* Unlike the StrongSwan client available on Android, there is generally
+no diagnostic data available to the user, error messages are sometimes 
+wrong, and rejected configurations sometimes result in a non-conforming
+abort of the IKE handshake (see RFC7296 2.21.2)
+
+For these reasons, we recommend against using Apple devices as clients for
+self-hosted VPNs, unless they can be used exclusively on an existing 
+network which itself is connected to the WAN. This rules out using Apple
+devices as mobile clients (i.e. IPsec over cellular connection).
+
+
+#### Clients: Windows
+
+We have not done any testing with Windows systems. According to StrongSwan
+documentation, Windows systems are generally compatible.
+
 ### II. VPN containers
 
 
-#### Client access options
+#### Client access
 
-Different types of clients will have different capabilities as far as setting
-their default route through the VPN container. Options include the following:
+Clients will need to either be connected to a network which has connectivity
+to the WAN, or will need to "dial in" directly to the WAN using IPsec as
+described above.
+
+Once this is done,
+different types of clients will have different capabilities as far as setting
+their default route through a VPN container. Options include the following:
 
 * Policy route through GRE tunnel somewhere along the path
   * Some clients don't have any specific capability to establish a tunnel. In 
@@ -243,38 +285,7 @@ on that device use another tunnel over SOCKS.
 an SSH server)
 
 
-#### Apple devices
 
-Based on limited experimentation, and without having done any further research,
- the following appears to be true about Apple systems.
-
-* It appears that current generation iOS/macOS does not allow users to connect 
-to VPNs unless those VPNs are registered with/approved by Apple. This appears 
-to rule
-out using newer Apple devices with the self-hosted setup configuration
-described here.
-* iOS releases from
-approximately 10 or more years ago, and macOS/Mac OS X up until the current
-generation, support IPsec VPN connections with certain additional requirements
-and limitations which are generally documented by Apple or made clear in
-the user interface.
-* iOS releases newer than the cohort discussed above (approx. 10+ years old),
-but not in the cohort of current/recent generation releases, cannot connect to IPsec 
-VPNs without a `mobileconfig` configuration, and they enforce undocumented
-requirements on things like certificates. 
-* Unlike the StrongSwan client available on Android, there is generally
-no diagnostic data available to the user, error messages are sometimes 
-wrong, and rejected configurations sometimes result in a non-conforming
-abort of the IKE handshake (see RFC7296 2.21.2)
-
-For these reasons, we recommend against using Apple devices as clients for
-self-hosted VPNs.
-
-
-#### Windows
-
-We have not done any testing with Windows systems. According to StrongSwan
-documentation, Windows systems are generally compatible.
 
 
 #### Container firewall and policy with `ipfw`
