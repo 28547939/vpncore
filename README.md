@@ -15,11 +15,19 @@ implement the design described in this document
 
 
 The purpose of this repository is to provide the tools and information 
-needed to implement this design.  
+needed to implement this design. The expected audience includes those
+who are familiar with the relevant technology but who have not necessarily
+worked through all the details involved in building and/or deploying
+such a system.
 
-"VPN containers" provide
-clients with routes out to the Internet, and other containers
-provide various local services.
+What problem does this system solve?
+
+* "VPN containers" are to provide clients with routes out to the Internet in an existing
+ microservice environment. It's essentially a "VPN-as-a-Service" design that also 
+ funnels all DNS resolution traffic through a designated forwarder. A level of indirection
+ is introduced between clients and VPN endpoints.
+ 
+
 
 The repository, aside from this document, is partly specific to FreeBSD, but this
 design can also be supported on Linux without issue.
