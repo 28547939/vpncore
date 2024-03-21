@@ -507,7 +507,12 @@ followed by deployment.
 
 * `POE` (including `POE::Kernel`, `POE::Session`, etc, which should be among
 its dependencies)
-* `YAML::XS` (we should probably change this to `YAML::Any`)
+* `POE::Component::Server::HTTP`
+* `POE::Component::Client::DNS`, `POE::Filter::DNS::TCP`, 
+* `YAML::XS` and `JSON::XS` (we should probably change these to the `::Any` variant)
+* `Net::DNS::Packet`, `Net::DNS::RR`, `Net::DNS::RR::PTR`
+* `Net::CIDR`, `Net::IPAddress::Util`
+* `Time::HiRes`
 
 
 
