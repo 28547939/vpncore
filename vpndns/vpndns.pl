@@ -108,6 +108,75 @@ BEGIN {
 #####################################################################################
 # 
 
+package vpndns::cache;
+
+use strict;
+use warnings;
+
+use Data::Dumper;
+
+my $cache = {};
+
+sub cache_key {
+    my ($type, $host) = @_;
+    return $type . $host;
+}
+
+sub delete {
+    my $key = shift;
+
+    delete $cache->{$key};
+}
+
+sub exists {
+    return exists $cache->{$_[0]};
+}
+
+sub flush {
+    $cache = {};
+}
+
+sub list {
+    return keys %$cache;
+}
+
+sub show {
+    # impossible, but observed 
+    if (not defined $cache) {
+        $cache = {};
+    }
+
+    return map {
+        $_  => [ map { $_->string } @{ $cache->{$_}->{response}{answer} } ]
+    } keys %$cache;
+}
+
+# $q is a Net::DNS::Question
+sub lookup {
+    my ($q) = @_;
+    return $cache->{&cache_key($q->qtype, $q->qname)};
+}
+
+sub update {
+    my ($response) = @_;
+    my $key = &cache_key($response->{type}, $response->{host});
+
+    my $ret;
+    if (defined $cache->{$key}) {
+        $ret = 1;
+    } else {
+        $ret = 0;
+    }
+        
+    if (defined $response->{error} and $response->{error} ne 'NOERROR') {
+        #L sprintf('cache::update: ignoring %s due to error in response', $key);
+    } else {
+        $cache->{$key} = $response;
+    }
+
+    return $ret;
+}
+
 package vpndns::blocklist;
 
 use strict;
@@ -231,6 +300,8 @@ sub read_list {
 
     $blocklist = \@x;
     L 'installed new blocklist';
+
+    return undef;
 }
 
 sub add_exceptions {
@@ -367,6 +438,7 @@ my $records = {};
 my $ptr_records = {};
 my $static_records_filename;
 my $static_records_auto_ptr;
+my $static_records_ttl;
 
 sub start {
     my %config = @_;
@@ -379,6 +451,7 @@ sub start {
                 $k->alias_set('static_records');
                 $static_records_filename = $config{static_records};
                 $static_records_auto_ptr = $config{static_records_auto_ptr};
+                $static_records_ttl = $config{static_records_ttl};
 
                 $k->yield('load');
             },
@@ -517,13 +590,15 @@ sub json_response {
         data        => $data,
     };
 
-    my $json = JSON::XS->new->utf8->pretty;
+    my $json = JSON::XS->new->pretty;
+    my $json_encoded = $json->encode($struct);
+    $json_encoded =~ s/\\t/\t/g;
 
     #print Dumper($response_obj);
 
     $response_obj->code($http_code);
     $response_obj->content_type('application/json');
-    $response_obj->content($json->encode($struct));
+    $response_obj->content($json_encoded);
     return $response_obj;
 }
 
@@ -603,6 +678,14 @@ sub start {
                         } else {
                             &json_response($resp, 200, 1, "unknown error", {}); # TODO
                         }
+                    } elsif ($path =~ '/blocklist/reload$') {
+                        if (defined (my $error = 
+                            $k->call('blocklist', 'load', $config{blocklist_dir}, $config{print_blocklist_read_progress}))) 
+                        {
+                            &json_response($resp, 200, 1, "error: $error", {});
+                        } else {
+                            &json_response($resp, 200, 0, 'success', {});
+                        }
                     } else {
                         &build_404($resp, '');
                     }
@@ -651,6 +734,61 @@ sub start {
                 return RC_OK;
             },
 
+            cache   => sub {
+                my ($k, $h, $caller, $args) = @_[KERNEL, HEAP, SENDER, ARG1];
+                my ($req, $resp) = @$args;
+
+                my $path = $req->header('X-Actual-Path');
+
+                my $method = $req->method;
+                if ($method eq 'POST') {
+                    if ($path eq '/cache/flush') {
+                        my $r = &vpndns::cache::flush;
+                        &json_response($resp, 200, 0, {})
+
+                    } elsif ($path =~ '/cache/del/([^\/]+)$') {
+                        my $arg = $1;
+                        if (&vpndns::cache::exists($arg)) {
+                            my $r = &vpndns::cache::delete($arg);
+                            &json_response($resp, 200, 0, 'success', {
+                                deleted    =>    $arg
+                            });
+                        } else {
+                            &json_response($resp, 200, 1, "the specified cache entry does not exist", [
+                                $arg
+                            ]);
+                        }
+                    } else {
+                        &build_404($resp, '');
+                    }
+                } elsif ($method eq 'GET') {
+                    if ($path eq '/cache/list') {
+                        my @r = &vpndns::cache::list;
+
+                        &json_response($resp, 200, 0, {
+                            entries => \@r
+                        });
+
+
+                    } elsif ($path eq '/cache/show') {
+                        my %r = &vpndns::cache::show;
+
+                        &json_response($resp, 200, 0, {
+                            entries => \%r
+                        });
+
+                    } else {
+                        &build_404($resp, '');
+                    }
+                }
+                #} else {
+                #    &build_402($resp, 'cache: usage: POST /cache/flush');
+                #}
+
+                return RC_OK;
+
+            },
+
             notfound => sub {
                 my ($k, $h, $c, $args) = @_[KERNEL, HEAP, SENDER, ARG1];
                 my ($req, $resp) = @$args;
@@ -667,9 +805,10 @@ sub httpd_start {
     my ($listen_addr, $listen_port, $callback) = @_;
 
     my @handlers = (
-        [ '^/blocklist/.+'            => '/blocklist' ],
-        [ '^/static_records/.+'       => '/static_records' ],
-        [ '.+'                        => '/notfound' ],
+        [ '^/blocklist/.+'              => '/blocklist' ],
+        [ '^/static_records/.+'         => '/static_records' ],
+        [ '^/cache/.+'                  => '/cache' ],
+        [ '.+'                          => '/notfound' ],
     );
 
     POE::Component::Server::HTTP->new(
@@ -700,6 +839,7 @@ sub httpd_start {
             '/notfound'             => $callback->('notfound'),
             '/blocklist'            => $callback->('blocklist'),
             '/static_records'       => $callback->('static_records'),
+            '/cache'                => $callback->('cache'),
         }, 
     );
 }
@@ -814,7 +954,7 @@ sub start {
         ns      => {},
         # maps unique string key (query type concatenated with domain name) to response packet
         # TODO - put this in a separate perl package so that we can query/modify it through the HTTP interface
-        cache   => {},
+        #cache   => {},
     }, 'vpndns::server';
 
     $self->{id} = $self->{config}{id};
@@ -850,6 +990,7 @@ sub session_start {
     # defaults
     my %defaults = (
         static_records_auto_ptr         => 1,
+        static_records_ttl              => 1,
         blocklist_only_a                => 1,
         print_blocklist_read_progress   => 1,
     );
@@ -912,41 +1053,20 @@ sub listener_error {
     undef;
 }
 
-sub cache_key {
-    my ($type, $host) = @_;
-    return $type . $host;
-}
+#sub cache_key {
+#    my ($type, $host) = @_;
+#    return $type . $host;
+#}
 
 sub ttl_timeout {
     my ($k, $h, $self, $type, $host) = @_[KERNEL, HEAP, OBJECT, ARG0, ARG1];
 
     EL sprintf('ttl_timeout: removed %s %s from cache', $type, $host);
-    delete $self->{cache}{&cache_key($type, $host)};
+    #delete $self->{cache}{&cache_key($type, $host)};
+    vpndns::cache::delete($type, $host);
 }
 
 
-# $q is a Net::DNS::Question
-sub lookup_cache {
-    my ($self, $q) = @_;
-    return $self->{cache}{&cache_key($q->qtype, $q->qname)};
-}
-
-sub update_cache {
-    my ($self, $response) = @_;
-    my $key = &cache_key($response->{type}, $response->{host});
-    my $ret = 0;
-    if (defined $self->{cache}{$key}) {
-        $ret = 1;
-    }
-        
-    if (defined $response->{error} and $response->{error} ne 'NOERROR') {
-        L sprintf('update_cache: ignoring %s due to error in response', $key);
-    } else {
-        $self->{cache}{$key} = $response;
-    }
-
-    return $ret;
-}
 
 sub build_nxdomain {
     my ($query_pkt, $context) = @_;
@@ -1125,7 +1245,8 @@ sub dns_query {
         return;
     }
 
-    if (defined (my $response = $self->lookup_cache($q))) {
+    #if (defined (my $response = $self->lookup_cache($q))) {
+    if (defined (my $response = vpndns::cache::lookup($q))) {
         $response->{context}{$_} = $context->{$_} for keys %$context; 
         L sprintf('satisfying request from %s:%d for %s %s with cache', $ip, $port, $q->qtype, $q->qname);
         $k->yield( 'send_response', $response );
@@ -1187,7 +1308,7 @@ sub send_response {
     }
     my $context = $response->{context};
 
-    my $existing = $self->update_cache($response);
+    my $existing = vpndns::cache::update($response);
 
     # only schedule cache removal if it was not already in the cache
     if ($existing == 0 && not defined $response->{context}{local_authoritative}) {
@@ -1201,7 +1322,21 @@ sub send_response {
             if (not defined $answer) {
                 EL sprintf('warning: response without any answer for %s %s', $response->{type}, $response->{host});
             } else {
-                my $ttl = $answer->ttl;
+
+                my $ttl;
+                if (defined $self->{config}{ttl_override}) {
+                    for my $domain (keys %{ $self->{config}{ttl_override} }) {
+                        if ($response->{host} =~ m/$domain$/) {
+                            $ttl = $self->{config}{ttl_override}{$domain};
+                            L sprintf('ttl_override: matched %s, setting ttl to %d', $domain, $ttl);
+                            last;
+                        }
+                    }
+                }
+
+                if (not defined $ttl) {
+                    $ttl = $answer->ttl;
+                }
                 $k->delay_add('ttl_timeout', $ttl, $response->{type}, $response->{host});
                 L sprintf('send_response: setting ttl_timeout for %s %s to %d', $response->{type}, $response->{host}, $ttl);
             }

@@ -89,6 +89,14 @@ nameserver_regex:
     '.+protonvpn.net$': 1.1.1.1
 
 
+# optionally, if desired, override TTL for certain domains 
+# for example, this will reduce load for domains that see heavy query load from internal applications
+#   when we know the query results won't change and we want to avoid passing that load on to our DNS servers
+# 
+# currently the keys in this map are regular expressions evaluated as: /DOMAIN$/
+# so a TTL override is intended to act on a domain and all of its subdomains
+ttl_override:
+    my_domain.com: 3600
 
 # VPN containers' addresses
 # In the "vpncore" design, most DNS requests will be serviced by the rules generated here,
@@ -172,9 +180,12 @@ nxdomain_regex:
 #	POST  /blocklist/add_exception/$DOMAIN
 #	POST  /blocklist/del_exception/$DOMAIN
 #	GET   /blocklist/list_exceptions
+#	POST  /blocklist/reload 
 #	POST  /static_records/reload
-#
-#	TODO future work - /blocklist/reload 
+#   GET   /cache/list
+#   GET   /cache/show           `list` shows which domains are cached; `show` also includes the cached responses
+#   POST  /cache/del/$KEY       where $KEY takes the same format as in /cache/list; ${RECORDTYPE}${DOMAIN}
+#   POST  /cache/flush
 #
 interface_listen: 
     - [ '127.0.0.1', 8080 ]
@@ -205,3 +216,6 @@ interface_listen:
 
 static_records: '/home/vpndns/dns/static.txt'
 #static_records_auto_ptr: true
+
+# TTL in seconds; defaults to 1 second for testing/convenience
+#static_records_ttl: 1
