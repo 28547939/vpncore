@@ -16,7 +16,6 @@ fi
 mountpoint=$(zfs get mountpoint $DYN_BASE)
 
 cp -v $BASE/files/container/sysctl.conf.local $mountpoint/usr/local/etc/
-cp -v $BASE/files/container/openvpn-sudo $mountpoint/usr/local/etc/sudoers.d/
 cp -v $BASE/files/container/extvpn-ipfw.sh $mountpoint/usr/local/etc/
 
 
