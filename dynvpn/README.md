@@ -1,7 +1,9 @@
 # `dynvpn.py `
 TODO markdown format
 
-Outline of operation and state changes:
+
+### Overview
+
 
 Terminology: 
 * The word "host" is used similarly to the main repository README, to refer to the jail host which 
@@ -23,10 +25,16 @@ so the ordering in the replica list can be arbitrary.
 * Startup: when an instance comes online, all its VPNs start out in Pending. After a waiting period during which it learns
 of peer instances, it brings VPN sessions online for which it is first in the replica list among online instances/sites,
 unless that VPN session is already online elsewhere. 
- * This accommodates both the scenario of all/most instances coming online simultaneously, and the scenario where
+  * This accommodates both the scenario of all/most instances coming online simultaneously, and the scenario where
  an instance comes online to join an existing network of instances that are already online.
- * This can result in multiple replicas coming online if there is a partition. But if the WAN is well-connected
+  * This can result in multiple replicas coming online if there is a partition. But if the WAN is well-connected
  (such as in a mesh topology), this is rare.
+* Currently, when a local VPN connection failure, we assume that it's a "bonafide" failure and we don't try to 
+  restart it, instead immediately closing/aborting the connection and notifying peers of the failure. Future work
+  can add the possibility to retry/restart before assuming failure.
+
+
+### State changes
 
 <pre>
 
@@ -127,4 +135,4 @@ Since `dynvpn.py` interacts with the local system using shell scripts, it abstra
 actually carry out their tasks, such as starting/stopping VPN processes, adding/removing routes, and checking
 for connectivity. Because of this we can test `dynvpn.py` using a set of test scripts. These scripts simulate the presence
 of the VPN process using empty files on the filesystem; as long as the file exists, the VPN is considered to be online.
-Failover is tested by deleting the file on one host.
+Failover is tested by deleting the file on one host. See the `test` sub-directory.

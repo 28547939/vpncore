@@ -18,8 +18,8 @@ local_vpn_dir: "/mnt/vpn"
 
 # configure how often peers 'ping'/check one another
 # ( 
-#   check interval (how often to check; starts on receipt of response),  
-#   check timeout, 
+#   check interval (how often to check; starts on receipt of response) (seconds),  
+#   check timeout (seconds), 
 #   number of retries (timeouts) before marking as unavailable 
 # )
 # in seconds
