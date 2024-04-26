@@ -1,9 +1,12 @@
 #!/bin/sh
 
+# should be run from start-jail.sh
+# 
+# requires DYN_BASE variable (set in common.sh) 
+# requires $NAME argument
+
 set -o nounset
 set -x
-
-DYN_BASE=$ZFS_BASE/dynvpn-base
 
 NAME=$1
 
@@ -14,4 +17,5 @@ if [ -z $src_snap ]; then
     exit 1
 fi
 
+zfs destroy -rf $ZFS_BASE/$NAME
 zfs clone $src_snap $ZFS_BASE/$NAME

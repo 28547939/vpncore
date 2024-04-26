@@ -6,7 +6,7 @@ set -x
 # jail subsystem triggers this script after jail creation, to be run outside the jail
 
 mkdir -p $VPN_DIR
-mount -t nullfs -o ro $BASE $VPN_DIR 
+mount -t nullfs $BASE $VPN_DIR 
 
 # for now, store some basic state on the filesystem for scripts that execute
 # within the jail that don't have our environment
@@ -34,8 +34,13 @@ $jexec sh /etc/extvpn-ipfw.sh
 
 sh $VPN_DIR/scripts/add-routes.sh $NAME $LOCAL_GATEWAY $VPN_DIR/etc/openvpn
 
-TUN=tun${VPN_ID}
-$jexec ifconfig $TUN create
+#TUN=tun${VPN_ID}
+#$jexec ifconfig $TUN create
+
+# 2024-03-27: workaround for tun allocation issue - let the system choose the ID number
+TUN=$($jexec ifconfig tun create)
+echo $TUN > $STATE_DIR/tun
+
 $jexec chown root:openvpn /dev/$TUN
 $jexec chmod 660 /dev/$TUN
 

@@ -12,3 +12,4 @@ LOCAL_ADDR=$2
 echo ssh -i ~/.ssh/id.dynvpn $LOCAL_ADDR /root/vpn/start-openvpn.sh $NAME
 
 touch $(dirname $0)/../state/$NAME
+touch $(dirname $0)/../pid/$NAME

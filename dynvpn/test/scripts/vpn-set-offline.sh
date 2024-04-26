@@ -12,3 +12,4 @@ echo ssh -i ~/.ssh/id.dynvpn $LOCAL_ADDR \
 	killall openvpn
 
 rm $(dirname $0)/../state/$NAME
+rm -f $(dirname $0)/../pid/$NAME

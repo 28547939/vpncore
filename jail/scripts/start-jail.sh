@@ -13,17 +13,19 @@ export BASE=$(dirname $0)/..
 
 # LOCAL_VPN_DIR: directory that $BASE is nullfs mounted on in the VPN jail, 
 # 	relative to the jail root
-# currently /mnt/vpn is hard-coded in various places, so this is not configurable
 export LOCAL_VPN_DIR=/mnt/vpn
 
-export JAIL_ROOT=/usr/jail/$NAME
+export NAME=$(vpn_name $VPN_ID)
+export JAIL_ROOT=$JAIL_BASE_PATH/$NAME
 
 # VPN_DIR: the same directory as LOCAL_VPN_DIR, but relative to the host root
 export VPN_DIR=${JAIL_ROOT}${LOCAL_VPN_DIR}
 
-export NAME=$(vpn_name $VPN_ID)
 
 echo jail name is $NAME
+
+# install relevant files that we have here into the base before cloning
+sh $BASE/scripts/update-files.sh $NAME
 
 sh $BASE/scripts/clone.sh $NAME
 
@@ -50,6 +52,10 @@ export HOSTNAME=$NAME.$HOST_HOSTNAME
 
 RCCONF_PATH=$BASE/etc/rc-conf/$NAME.conf
 cp $RCCONF_PATH $JAIL_ROOT/etc/rc.conf.local
+
+sudoers_path=$JAIL_ROOT/usr/local/etc/sudoers.d/dynvpn.conf
+echo "openvpn ALL=(root) NOPASSWD: $LOCAL_VPN_DIR/scripts/openvpn-up.sh" > $sudoers_path
+#echo "" >> $sudoers_path
 
 jail -v -p 1 -c \
     name=$NAME \

@@ -8,6 +8,8 @@ set -o nounset
 # not in our directory
 . $(dirname $0)/../etc/vars.sh
 
+export DYN_BASE=$ZFS_BASE/base
+
 # re-set this variable in case we have not inherited the environment from start-jail.sh
 export LOCAL_VPN_DIR=/mnt/vpn
 

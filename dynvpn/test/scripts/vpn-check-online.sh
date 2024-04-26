@@ -3,8 +3,8 @@
 
 set -o nounset
 
-NAME=$1
-LOCAL_ADDR=$2
+LOCAL_ADDR=$1
+NAME=$2
 
 
 # each VPN jail has a "dynvpn" user
