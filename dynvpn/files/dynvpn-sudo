@@ -1,0 +1,2 @@
+# for Linux change this appropriately 
+dynvpn ALL=(root) NOPASSWD: /sbin/route
