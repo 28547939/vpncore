@@ -9,8 +9,8 @@ Major components of this repository:
 `A` and `PTR` records (`vpndns`), and caching based on TTL, with HTTP interface	
 * VPN connection/session failover system to monitor connection availability and update
 BGP anycast routes appropriately (`dynvpn.py`)
-* Various FreeBSD jail-related scripts which are used to 
-implement the design described in this document
+* Various FreeBSD jail-related scripts (in `jail/`) which are used to 
+implement the design described in this document 
 
 
 
@@ -20,19 +20,21 @@ who are familiar with the relevant technology but who have not necessarily
 worked through all the details involved in building and/or deploying
 such a system.
 
+See `SETUP.md` for a configuration overview and an example of specific installation steps for 
+all three components (`vpndns`, `dynvpn`, and VPN jail/container setup).
+
 What problem does this system solve?
 
 * "VPN containers" are to provide clients with routes out to the Internet in an existing
  microservice environment. It's essentially a "VPN-as-a-Service" design that also 
  funnels all DNS resolution traffic through a designated forwarder. A level of indirection
  is introduced between clients and VPN endpoints.
- 
 
 
 The repository, aside from this document, is partly specific to FreeBSD, but this
 design can also be supported on Linux without issue.
 
-#### Preliminary discussion: VPN containers
+#### Note on VPN containers
 
 Clients are
 configured statically with default routes through GRE, or their traffic is directed by policy route 
@@ -95,6 +97,8 @@ sites pass through the container in both directions.
 instance on each host's IPsec container manages the election of a primary
 for each VPN instance and communicates anycast routing changes to the local
 BGP daemon via static route.
+     * The content of the `dynvpn` subdirectory under this repository it intended to be
+     deployed to, and run from, the `ipsec` container.
 
 2. **VPN containers**: providing Internet connectivity to clients via an external
 VPN connection, such as OpenVPN or Wireguard. Generally, client traffic
@@ -579,11 +583,3 @@ TODO: More details, config
 will use it as its source address, simplifying routing and configuration.
 5. Add route(s) and modify ACLs in VPN container for jail desktop
 
-
-### Container setup: FreeBSD
-
-Scripts and other configuration materials are available in the `jail` directory.
-This is not meant to be a complete, self contained system, but it provides 
-most of what is needed to start and operate the VPN jails using clones given 
-an existing base jail. This work is basically finished but is currently a work 
-in progress, pending an unresolved FreeBSD issue involving tunnel creation/destruction.
