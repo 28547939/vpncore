@@ -1,0 +1,2 @@
+# place this in the dynvpn jail base filesystem, at $PREFIX/etc/sudoers.d/
+openvpn ALL=(root) NOPASSWD: /mnt/vpn/scripts/openvpn-up.sh
