@@ -22,8 +22,8 @@ jladdr="table(def-jladdr)"
 TUN=$dev
 vpndns="table(def-vpndns)"
 
-epair_local=$(cat $LOCAL_VPN_DIR/state/$(hostname)/epair-local)b
-epair_anycast=$(cat $LOCAL_VPN_DIR/state/$(hostname)/epair-anycast)b
+epair_local=$(cat $LOCAL_VPN_DIR/state/$NAME/epair-local)b
+epair_anycast=$(cat $LOCAL_VPN_DIR/state/$NAME/epair-anycast)b
 
 
 ipfw table intnet add 10.15.12.2
