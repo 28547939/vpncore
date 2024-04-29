@@ -15,7 +15,7 @@ SSH="ssh    \
             -o StrictHostKeyChecking=off \
             -i ~/.ssh/id.openvpn openvpn@$LOCAL_ADDR"
 
-$SSH     sh $LOCAL_VPN_DIR/scripts/generate-config.sh \> /home/openvpn/openvpn.conf
+$SSH     sh $LOCAL_VPN_DIR/scripts/generate-config.sh $NAME $LOCAL_VPN_DIR \> /home/openvpn/openvpn.conf
 
 # each VPN jail has a "openvpn" user to run the OpenVPN daemon unprivileged
 $SSH    \

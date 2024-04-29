@@ -1,6 +1,8 @@
 # `dynvpn.py `
 TODO markdown format
 
+Currently, `dynvpn.py` requires Python 3.11 or newer.
+
 
 ### Overview
 

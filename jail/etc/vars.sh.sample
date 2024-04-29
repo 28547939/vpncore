@@ -1,8 +1,11 @@
 #!/bin/sh
 
-export JAIL_BASE_PATH=/usr/jail
+# base system install - NOT the "dynvpn" base
 export BASEJAIL_PATH=/usr/jail/basejail
-export ZFS_BASE=zroot/jail
+
+# path to the dynvpn base (what we clone from)
+export JAIL_BASE_PATH=/usr/jail/dynvpn
+export ZFS_BASE=zroot/jail/dynvpn
 
 export HOST_HOSTNAME="myhost"
 
