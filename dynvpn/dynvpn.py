@@ -1,6 +1,3 @@
-#!/usr/local/etc/python3.11
-
-
 import sys
 import os
 import subprocess
@@ -298,7 +295,6 @@ class instance():
                     # using this lower-level method, not the vpn_offline method, so that we don't update status
                     await self._set_local_vpn_offline(vpn_id)
                 
-                # TODO - confirm this is correct - should have been here already
                 await self._set_status(vpn_id, vpn_status.Replica, False)
 
         self.ready=True

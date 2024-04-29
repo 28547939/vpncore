@@ -6,11 +6,10 @@ set -o nounset
 # installation-specific - depends on how provider configuration is collected/stored/modified
 # this is one example
 
-VPN_HOSTNAME=$(hostname)
+NAME=$1
+LOCAL_VPN_DIR=$2
 
-. $(dirname $0)/common.sh
-
-read TUNID PROVIDER FILENAME < $LOCAL_VPN_DIR/etc/vpn/$VPN_HOSTNAME
+read TUNID PROVIDER FILENAME < $LOCAL_VPN_DIR/etc/vpn/$NAME
 
 file="$LOCAL_VPN_DIR/etc/openvpn/$PROVIDER/$FILENAME"
 
