@@ -11,7 +11,7 @@ mount -t nullfs $BASE $VPN_DIR
 # for now, store some basic state on the filesystem for scripts that execute
 # within the jail that don't have our environment
 # (such as ipfw rule script when executed by the openvpn process)
-export STATE_DIR=$BASE/state/$HOSTNAME
+export STATE_DIR=$BASE/state/$NAME
 mkdir -p $STATE_DIR
 echo $EPAIR > $STATE_DIR/epair-local
 echo $EPAIR_ANYCAST > $STATE_DIR/epair-anycast

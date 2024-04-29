@@ -13,9 +13,9 @@ if [ $(zfs get -Ho value mounted $DYN_BASE) != "yes" ]; then
 fi
 
 
-mountpoint=$(zfs get mountpoint $DYN_BASE)
+mountpoint=$(zfs get -Ho value mountpoint $DYN_BASE)
 
 cp -v $BASE/files/container/sysctl.conf.local $mountpoint/usr/local/etc/
-cp -v $BASE/files/container/extvpn-ipfw.sh $mountpoint/usr/local/etc/
+cp -v $BASE/files/container/extvpn-ipfw.sh $mountpoint/etc
 
 
