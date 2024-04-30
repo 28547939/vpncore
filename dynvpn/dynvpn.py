@@ -313,16 +313,17 @@ class instance():
                 # TODO
 
 
+    # TODO API access / HTTP functionality in separate module as it expands
     async def start_http_server(self):
-        async def pull_handler(request):
-            self._logger.info(f'received pull_state from {request.remote}')
+        async def pull_handler(request, match):
+            self._logger.debug(f'received pull_state from {request.remote}')
             req_data=json.loads(await request.content.read())
             await self.handle_site_status(req_data['site_id'], site_status.Online)
 
-            return aiohttp.web.Response(text=self._encode_state())
+            return self._encode_state()
 
-        async def push_handler(request):
-            self._logger.info(f'received push_state from {request.remote}')
+        async def push_handler(request, match):
+            self._logger.debug(f'received push_state from {request.remote}')
             data=await request.content.read()
             try:
                 state=self._decode_state(data)
@@ -332,14 +333,54 @@ class instance():
             await self.handle_site_status(state['id'], site_status.Online)
             await self.handle_peer_state(state)
 
-            return aiohttp.web.Response(text='{}')
+            return {}
+        
+        async def restart_handler(request, match):
+            self._logger.debug(f'received restart from {request.remote}')
+            data=await request.content.read()
+            vpn_id=match["id"]
+
+            try:
+                await self._set_local_vpn_offline(vpn_id, False)
+            except Exception:
+                return {
+                    'error': f'VPN {vpn_id} is not configured'
+                }
+
+            await asyncio.sleep(1)
+
+            r=await self._set_local_vpn_online(vpn_id)
+
+            if r == True:
+                return {}
+            else:
+                return {
+                    'error': 'failed'
+                }
+            
+
+        # like pull_state but user-facing instead of peer-facing
+        async def dump_handler(request, match):
+            self._logger.debug(f'received dump_state from {request.remote}')
+            return self._encode_state()
+            
 
         router=aiohttp.web.UrlDispatcher()
         router.add_get('/pull_state', pull_handler)
         router.add_post('/push_state', push_handler)
+        router.add_post('/restart/{id}', restart_handler)
+        router.add_get('/dump_state', dump_handler)
         async def handler(request):
             match=await router.resolve(request)
-            return await match.handler(request)
+            respdata=await match.handler(request, match)
+            if type(respdata) == str:
+                resptext=respdata
+            else:
+                resptext=json.dumps(respdata)
+
+            resptext += "\n"
+
+            return aiohttp.web.Response(text=resptext)
             # TODO exceptions
 
 
@@ -371,7 +412,10 @@ class instance():
 
 
     def get_local_vpn(self, vpn_id : str):
-        return self.sites[self.site_id].vpn[vpn_id]
+        try:
+            return self.sites[self.site_id].vpn[vpn_id]
+        except KeyError:
+            return None
 
     """
     ==========================================================================================================
@@ -564,7 +608,7 @@ class instance():
                 vpn_id: str(v.status) for (vpn_id, v) in self.sites[self.site_id].vpn.items()
             }
         })
-        return json.dumps(s)
+        return json.dumps(s, indent=4)
 
     def _decode_state(self, data : str) -> Dict:
         d=json.loads(data)
@@ -776,8 +820,13 @@ class instance():
     """
     stop any running openvpn process and remove any existing anycast route
     """
-    async def _set_local_vpn_offline(self, vpn_id : str):
+    async def _set_local_vpn_offline(self, vpn_id : str, remove_route : bool=True):
         v=self.get_local_vpn(vpn_id)
+
+        if v is None:
+            raise Exception()
+            # TODO specific exception classes once we have a better idea of common exceptions to be thrown throughout the program
+
         # also removes PID file
         (ret, stdout, stderr)=await self._cmd(
             os.path.join(self._script_path, f'vpn-set-offline.sh'),
@@ -786,10 +835,11 @@ class instance():
             self.local_config["local_vpn_dir"]
         )
 
-        (ret, stdout, stderr)=await self._cmd(
-            os.path.join(self._script_path, f'delete-vpn-route.sh'),
-            str(v.anycast_addr),
-        )
+        if remove_route:
+            (ret, stdout, stderr)=await self._cmd(
+                os.path.join(self._script_path, f'delete-vpn-route.sh'),
+                str(v.anycast_addr),
+            )
 
         # TODO error handling
 
@@ -846,7 +896,8 @@ async def main():
     )
 
     prs.add_argument('--site-id', required=True)
-    #prs.add_argument('--local-config', required=True)
+    prs.add_argument('--local-config', required=True, default='local.yml')
+    prs.add_argument('--global-config', required=True, default='global.yml')
     args=vars(prs.parse_args())
 
 
@@ -859,10 +910,10 @@ async def main():
     h.setFormatter(fmt)
     logger.addHandler(h)
 
-    with open('./local.yml', 'rb') as f:
+    with open(args["local_config"], 'rb') as f:
         local_config=yaml.safe_load(f)
 
-    with open('./global.yml', 'rb') as f:
+    with open(args["global_config"], 'rb') as f:
         global_config=yaml.safe_load(f)
 
     i = instance(args['site_id'], local_config, global_config, logger)
