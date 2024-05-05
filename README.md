@@ -27,7 +27,8 @@ What problem does this system solve?
 
 * "VPN containers" are to provide clients with routes out to the Internet in an existing
  microservice environment. It's essentially a "VPN-as-a-Service" design that also 
- funnels all DNS resolution traffic through a designated forwarder. A level of indirection
+ funnels all DNS resolution traffic through a designated forwarder which also filters. 
+ In general a level of indirection
  is introduced between clients and VPN endpoints.
 
 
@@ -225,7 +226,7 @@ parameter in the StrongSwan configuration (see example `swanctl.conf`).
 
 
 
-#### Clients: Apple devices
+#### IPsec clients: Apple devices
 
 Based on limited experimentation, and without having done any further research,
  the following appears to be true about Apple systems.
@@ -255,7 +256,7 @@ network which itself is connected to the WAN. This rules out using Apple
 devices as mobile clients (i.e. IPsec over cellular connection).
 
 
-#### Clients: Windows
+#### IPsec clients: Windows
 
 We have not done any testing with Windows systems. According to StrongSwan
 documentation, Windows systems are generally compatible.
@@ -284,8 +285,9 @@ Internet-bound traffic is forwarded over the tunnel.
 to install and configure a GRE tunnel.
 
 * Local GRE tunnel
-  * This is the same as the above, except the client has the GRE tunnel
-installed locally.
+  * This is similar to the above, except the client has the GRE tunnel
+installed locally, and we set a default route through the remote end of the
+tunnel instead of a policy route.
 
 * SOCKS proxy
   * This is an option for clients which can't use a tunnel (for example an
@@ -303,7 +305,7 @@ an SSH server)
 #### Container firewall and policy with `ipfw`
 
 An example `ipfw` configuration, for VPN containers, is provided in this repository. 
-It incorporates the features that are discussed in this document.
+It incorporates the features that are discussed in this document, as applicable.
 
 
 
@@ -322,7 +324,7 @@ BGP can be used to install appropriate routes automatically.
 IPsec containers on each host are directly connected over IPsec tunnel, and 
 BGP sessions are established over the IPsec tunnel's single hop. 
 `FRRouting` is one option for 
-a BGP server, and we provide a sample configuration in `misc/bgpd.conf`.
+a BGP server, and we provide a sample configuration in `dynvpn/files/bgpd.conf`.
 
 Unless the WAN topology is a full mesh, packets from client to container will 
 often be traversing multiple hosts (i.e. multiple IPsec containers and their
@@ -369,8 +371,8 @@ at a time, with a replica coming online if the primary fails.
 
 This is implemented in `dynvpn.py`. Each VPN container can be activated on
 any host in the WAN, and ordering of primary/replica hosts is statically 
-configured. The program checks for connectivity in the VPN containers that 
-it's monitoring, and notifies peers of state changes, in addition to monitoring
+configured. The program checks for connectivity in the active VPN containers,
+and notifies peers of state changes, in addition to monitoring
 peers with a heartbeat. Only the active VPN container's anycast address is
 advertised on BGP, and this is changed appropriately when failover takes place;
 that is, when the container on one host fails and the corresponding container on
@@ -405,13 +407,14 @@ resolver configuration.
 
 VPN container clients statically configure the address of the `vpndns` server as
 their resolver. Typically, clients route their access to the server through
-their route to the VPN container, so that the VPN container itself is automatically 
-chosen by the server to handle the request (because of NAT to the container's 
+their route to the VPN container (which is directly connected thanks to the GRE
+tunnel interface), so that the VPN container itself is automatically 
+chosen by the `vpndns` server to handle the request (because of NAT to the container's 
 jail address; see details below).
 
 Clients which are not interacting with VPN containers can still use the `vpndns`
-server for resolution, in which case the server can configure the correct 
-VPN container to forward requests to.
+server for resolution, in which case the `vpndns` server can configure the correct 
+VPN container to forward requests to as a matter of policy.
 
   
 ![](readme-img/host-detail.png)

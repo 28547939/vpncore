@@ -7,7 +7,6 @@ dynvpn/global.yml
 dynvpn/local.yml
 jail/scripts/generate-config.sh
 jail/scripts/additional-ipfw-tables.sh
-jail/scripts/openvpn-up.sh
 jail/etc/*-password.txt
 jail/etc/openvpn/*
 jail/etc/rc-conf/*
