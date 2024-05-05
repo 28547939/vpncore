@@ -63,10 +63,9 @@ form `PROVIDER/FILE`. These two identifiers will be used to specify which
 configuration to use for a given VPN container.
 1. Configure a `dynvpn` jail, for example, `dynvpn0`:
    1. Create a file `$BASE/etc/vpn/dynvpn0` with the following format:
-
-      ```
-PROVIDER FILE
-```
+        ```
+        PROVIDER FILE
+        ```
 
       where `PROVIDER` and `FILE` correspond to the identifiers from the previous
 step. In this way, the specific provider and configuration file (e.g., representing
@@ -76,12 +75,11 @@ the provider's specific OpenVPN server to connect to) can be specified.
 `/etc/rc.conf.local` in the VPN container
 
 1. Start the jail using `start-jail.sh`:
+    ```
+    # ./start-jail.sh JAIL_ID
+    ```
 
-   ```
-# ./start-jail.sh JAIL_ID
-   ```
-
- where `JAIL_ID` is the numeric VPN jail ID (not the name), such as `0` 
+   where `JAIL_ID` is the numeric VPN jail ID (not the name), such as `0` 
 (not `dynvpn0`). This will clone it from the dynvpn base,
 copy certain files over, and start the jail. The VPN connection will not be
 started: it is started as appropriate by the `dynvpn.py` program.
@@ -89,9 +87,9 @@ started: it is started as appropriate by the `dynvpn.py` program.
 Once these steps are completed, it should be possible to start an OpenVPN
 session using the `vpn-set-online.sh` script from the `dynvpn/` part of the
 repository, with appropriate values, such as:
-<pre>
+```
 dynvpn@ipsec.host1 $ ./vpn-set-online.sh dynvpn0 192.168.1.50 /mnt/vpn
-</pre>
+```
 
 ### `dynvpn`
 
@@ -129,6 +127,6 @@ similar to `dynvpn/files/swanctl.conf` in this repository.
 Once these steps are completed, it should be possible to run the `dynvpn.py`
 program on multiple IPsec-connected hosts to maintain VPN connectivity in
 a fault-tolerant manner:
-<pre>
+```
 dynvpn@ipsec.host1 $ python3.11 dynvpn.py --site-id MYSITE
-</pre>
+```
