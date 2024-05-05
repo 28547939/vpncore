@@ -34,7 +34,8 @@ the jail to forward a non-privileged port to `53` locally, or modify
 1. Create a jail filesystem / install a base system onto `zroot/jail/dynvpn/base`.
 This will be the "jail base" that `dynvpn` instances are cloned from.
 1. In the base jail, create a user `openvpn` with home directory `/usr/home/openvpn`,
-and create the directory `/mnt/vpn`
+and create the directory `/mnt/vpn`. Also set up public-key authentication for the 
+`openvpn` user.
 1. Copy the contents of `jail/` from this repository into location on the host
 which we will refer to as `$BASE`
 1. Ensure permissions are set as follows, or similar, for the directories inside
@@ -56,28 +57,31 @@ This section assumes that OpenVPN configuration will be generated from files
 present in `$BASE/etc/openvpn`, using a method similar to what is available
 in `$BASE/scripts/generate-config.sh.sample`.
 
-1. Create and configure the `dynvpn` base jail filesystem.
-   1. Create the jail at `zroot/jail/dynvpn/base`. It will not be started, but its
-filesystem will be used as a base for clones for the `dynvpn` jails 
-   1. Create `openvpn` and, optionally, `socks` users inside the jail, and setup 
-public-key authentication.
-
 1. Navigate to `$BASE/etc/openvpn`
    * In that directory, add OpenVPN client configuration files with paths of the
 form `PROVIDER/FILE`. These two identifiers will be used to specify which 
 configuration to use for a given VPN container.
 1. Configure a `dynvpn` jail, for example, `dynvpn0`:
    1. Create a file `$BASE/etc/vpn/dynvpn0` with the following format:
-<pre>PROVIDER FILE</pre>
-where `PROVIDER` and `FILE` correspond to the identifiers from the previous
+
+      ```
+PROVIDER FILE
+```
+
+      where `PROVIDER` and `FILE` correspond to the identifiers from the previous
 step. In this way, the specific provider and configuration file (e.g., representing
 the provider's specific OpenVPN server to connect to) can be specified.
-   1. Edit `$BASE/etc/rc-conf/dynvpn0.conf`, which will be copied into 
+   
+    1. Edit `$BASE/etc/rc-conf/dynvpn0.conf`, which will be copied into 
 `/etc/rc.conf.local` in the VPN container
+
 1. Start the jail using `start-jail.sh`:
-<pre> # ./start-jail.sh JAIL_ID
-</pre>
-where `JAIL_ID` is the numeric VPN jail ID (not the name), such as `0` 
+
+   ```
+# ./start-jail.sh JAIL_ID
+   ```
+
+ where `JAIL_ID` is the numeric VPN jail ID (not the name), such as `0` 
 (not `dynvpn0`). This will clone it from the dynvpn base,
 copy certain files over, and start the jail. The VPN connection will not be
 started: it is started as appropriate by the `dynvpn.py` program.
@@ -93,11 +97,13 @@ dynvpn@ipsec.host1 $ ./vpn-set-online.sh dynvpn0 192.168.1.50 /mnt/vpn
 
 1. Create or use an existing "IPsec" jail, as described in `README.md`. 
 We will run the `dynvpn.py` program
-to manage active VPN connections in this jail. 
-   * The reason for this is that an
+to manage active VPN connections in this jail. The remaining steps take
+place inside this jail.
+   * The reason for running the program in this jail is that an
 active VPN connection will have the VPN container's anycast address advertised
 over BGP as described in `README.md`, since the easiest way to do this is to 
-add the route to the routing table local to the BGP daemon. 
+add the route to the routing table local to the BGP daemon (which in our 
+setup, runs in the IPsec jail). 
 But the `dynvpn` program and scripts can
 be modified to accommodate a different setup, so an "IPsec jail" may not be 
 necessary.  
@@ -105,7 +111,7 @@ necessary.
 with what is described in `README.md`, but that does not preclude other
 configurations.
 
-1. Create a `dynvpn` user and copy the contens of the `dynvpn/` directory in
+1. Create a `dynvpn` user and copy the contents of the `dynvpn/` directory in
 this repository into the user's home directory.
 
 1. Setup and install `net/frrouting` and install a `bgpd.conf` in 
@@ -115,7 +121,7 @@ repository under `dynvpn/files/bgpd.conf`
 to `/usr/local/etc/sudoers.d/`. 
 1. Install and configure `security/strongswan`, for example using a `swanctl.conf` 
 similar to `dynvpn/files/swanctl.conf` in this repository.
-1. Place the keys for the `openvpn` user, created earlier, in 
+1. Place the keys for the `openvpn` user, created earlier (in the `jail` step), in 
 `~dynvpn/.ssh/` as `id.openvpn` and `id.openvpn.pub`.
 1. Configure `local.yml` and `global.yml` based on the samples provided
 
