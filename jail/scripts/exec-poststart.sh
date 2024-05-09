@@ -34,6 +34,11 @@ $jexec sh /etc/extvpn-ipfw.sh
 
 sh $VPN_DIR/scripts/add-routes.sh $NAME $LOCAL_GATEWAY $VPN_DIR/etc/openvpn
 
+# optionally, load GRE from JSON (see load-gre.sh.sample)
+if [ -f $BASE/etc/gre/$NAME.json ] && [ -x $BASE/scripts/load-gre.sh ] ;
+    $jexec $LOCAL_VPN_DIR/scripts/load-gre.sh $LOCAL_VPN_DIR/etc/gre/$NAME.json
+fi
+
 #TUN=tun${VPN_ID}
 #$jexec ifconfig $TUN create
 

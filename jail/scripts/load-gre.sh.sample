@@ -1,0 +1,57 @@
+#!/bin/sh
+
+set -o nounset
+#set -x
+
+FILE=$1
+
+# load a JSON GRE config file (BSD)
+# the JSON config to load specifies the parameters of a specific GRE interface
+# /30 prefix is assumed
+#
+# example:
+# {
+#   "gre0": {
+#       "inet": [ "10.0.0.1", "10.0.0.2" ],
+#       "tunnel": [ "192.168.1.1", "192.168.1.2" ]
+#   }
+# }
+
+
+jq_value () {
+    cat $FILE | jq -er "$@ // empty"
+}
+
+export IFS=$'\t'
+for iface in $(jq_value 'keys | @tsv'); do 
+    echo Processing interface "'$iface'"
+
+    ifconfig $iface >/dev/null 2>/dev/null
+    if [ $? == 1 ] ; then
+        ifconfig $iface create
+    fi
+
+    inet1=$(jq_value ".${iface}.inet[0]")
+    inet2=$(jq_value ".${iface}.inet[1]")
+    tunnel1=$(jq_value ".${iface}.tunnel[0]")
+    tunnel2=$(jq_value ".${iface}.tunnel[1]")
+    routes=$(jq_value ".${iface}.routes | arrays | @tsv")
+
+    if [ -z $inet1 ] || [ -z $inet2 ] || [ -z $tunnel1 ] || [ -z $tunnel2 ]; then
+        echo unable to load interface "$iface"  >&2
+        return
+    fi
+
+    cmd="ifconfig $iface inet ${inet1}/30 $inet2 tunnel $tunnel1 $tunnel2"
+    eval $cmd
+
+    if [ ! -z "$routes" ] ; then
+        for route in $routes ; do 
+            route delete $route #2>/dev/null
+            route add $route $inet2
+        done
+    fi
+
+    ipfw table allow-gre add $iface
+done
+

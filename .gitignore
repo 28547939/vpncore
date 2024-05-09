@@ -7,10 +7,13 @@ dynvpn/global.yml
 dynvpn/local.yml
 jail/scripts/generate-config.sh
 jail/scripts/additional-ipfw-tables.sh
+jail/scripts/load-gre.sh
 jail/etc/*-password.txt
 jail/etc/openvpn/*
 jail/etc/rc-conf/*
 !jail/etc/rc-conf/sample.conf
+jail/etc/gre/*
+!jail/etc/gre/sample.json
 jail/etc/vpn/*
 !jail/etc/vpn/sample
 jail/etc/vars.sh
