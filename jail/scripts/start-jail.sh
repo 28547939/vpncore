@@ -57,6 +57,7 @@ cp $RCCONF_PATH $JAIL_ROOT/etc/rc.conf.local
 # avoid hard-coding $LOCAL_VPN_DIR 
 sudoers_path=$JAIL_ROOT/usr/local/etc/sudoers.d/openvpn-up
 echo "openvpn ALL=(root) NOPASSWD: $LOCAL_VPN_DIR/scripts/openvpn-up.sh" > $sudoers_path
+echo "openvpn ALL=(root) NOPASSWD: $LOCAL_VPN_DIR/scripts/load-gre.sh" >> $sudoers_path
 
 jail -v -p 1 -c \
     name=$NAME \
