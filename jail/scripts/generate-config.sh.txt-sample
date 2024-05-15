@@ -5,17 +5,21 @@ set -o nounset
 # to be run inside a VPN jail
 # installation-specific - depends on how provider configuration is collected/stored/modified
 # this is one example
+# JSON approach is better
 
 NAME=$1
 LOCAL_VPN_DIR=$2
 
-read TUNID PROVIDER FILENAME < $LOCAL_VPN_DIR/etc/vpn/$NAME
+read PROVIDER FILENAME < $LOCAL_VPN_DIR/etc/vpn/$NAME
+
+# tunnel is created earlier during jail startup
+TUN=$(cat $LOCAL_VPN_DIR/state/$NAME/tun)
 
 file="$LOCAL_VPN_DIR/etc/openvpn/$PROVIDER/$FILENAME"
 
 cat "$file" | \
 sed -Ee "s/^auth-user-pass[[:space:]]*$/auth-user-pass \/mnt\/vpn\/etc\/${PROVIDER}-password.txt /" | \
-sed -Ee "s/^dev tun[[:space:]]*$/dev tun${TUNID}/" 
+sed -Ee "s/^dev tun[[:space:]]*$/dev tun${TUN}/" 
 
 
 

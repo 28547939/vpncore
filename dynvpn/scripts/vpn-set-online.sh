@@ -7,15 +7,17 @@ set -x
 export NAME=$1
 export LOCAL_ADDR=$2
 export LOCAL_VPN_DIR=$3
+export SITE_ID=$4
 
 
 SSH="ssh    \
             -o SendEnv=NAME \
             -o SendEnv=LOCAL_VPN_DIR \
             -o StrictHostKeyChecking=off \
+            -o ConnectTimeout=5 \
             -i ~/.ssh/id.openvpn openvpn@$LOCAL_ADDR"
 
-$SSH     sh $LOCAL_VPN_DIR/scripts/generate-config.sh $NAME $LOCAL_VPN_DIR \> /home/openvpn/openvpn.conf
+$SSH     sh $LOCAL_VPN_DIR/scripts/generate-config.sh $NAME $LOCAL_VPN_DIR $SITE_ID \> /home/openvpn/openvpn.conf
 
 # each VPN jail has a "openvpn" user to run the OpenVPN daemon unprivileged
 $SSH    \

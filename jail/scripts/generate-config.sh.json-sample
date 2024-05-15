@@ -1,0 +1,32 @@
+#!/bin/sh
+
+set -o nounset
+
+# to be run inside a VPN jail
+
+NAME=$1
+LOCAL_VPN_DIR=$2
+SITE_ID=$3
+
+# with the JSON config approach, we put all VPN connections for a site into one file
+
+config=$LOCAL_VPN_DIR/etc/vpn/$SITE_ID.json
+
+PROVIDER=$(cat $config | jq -r ".${NAME}[0]")
+FILENAME=$(cat $config | jq -r ".${NAME}[1]")
+
+if [ -z $PROVIDER ] || [ -z "$FILENAME" ]; then
+    exit 1
+fi
+
+file="$LOCAL_VPN_DIR/etc/openvpn/$PROVIDER/$FILENAME"
+
+# tunnel is created earlier during jail startup
+TUN=$(cat $LOCAL_VPN_DIR/state/$NAME/tun)
+
+cat "$file" | \
+sed -Ee "s/^auth-user-pass[[:space:]]*$/auth-user-pass \/mnt\/vpn\/etc\/${PROVIDER}-password.txt /" | \
+sed -Ee "s/^dev tun[[:space:]]*$/dev $TUN/" 
+
+
+
