@@ -280,7 +280,7 @@ class instance():
 
             # if we're the highest priority, only bring the VPN online at startup if it's not online elsewhere
             if  self.site_id == prio[0] and \
-                len(list(filter(lambda s: s.vpn[vpn_id].status == vpn_status.Online, self.sites.values()))) == 0:
+                len(list(filter(lambda s: vpn_id in s.vpn and s.vpn[vpn_id].status == vpn_status.Online, self.sites.values()))) == 0:
                     self._logger.info(f'local VPN is first in priority list, with no replicas available - setting online (list={prio})')
 
                     # False argument - do not push this state to peers, to avoid noise during startup
@@ -856,11 +856,14 @@ class instance():
             os.path.join(self._script_path, f'vpn-set-online.sh'),
             v.id,
             str(v.local_addr),
-            self.local_config["local_vpn_dir"]
+            self.local_config["local_vpn_dir"],
+            self.site_id
         )
 
         if ret != 0:
-            self._logger.error(f'_set_local_vpn_online({vpn_id}): online script failed (stdout={stdout}, stderr={stderr})')
+            stderr_enc=stderr.decode('utf-8')
+            stdout_enc=stderr.decode('utf-8')
+            self._logger.error(f'_set_local_vpn_online({vpn_id}): online script failed (stdout={stdout_enc}, stderr={stderr_enc})')
             return False
 
         sleep_time=5
