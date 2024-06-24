@@ -94,7 +94,7 @@ dynvpn@ipsec.host1 $ ./vpn-set-online.sh dynvpn0 192.168.1.50 /mnt/vpn
 ### `dynvpn`
 
 1. Create or use an existing "IPsec" jail, as described in `README.md`. 
-We will run the `dynvpn.py` program
+We will run the `dynvpn` program
 to manage active VPN connections in this jail. The remaining steps take
 place inside this jail.
    * The reason for running the program in this jail is that an
@@ -111,7 +111,6 @@ configurations.
 
 1. Create a `dynvpn` user and copy the contents of the `dynvpn/` directory in
 this repository into the user's home directory.
-
 1. Setup and install `net/frrouting` and install a `bgpd.conf` in 
 `/usr/local/etc/frr/bgpd.conf` similar to the sample available in this
 repository under `dynvpn/files/bgpd.conf`
@@ -122,11 +121,16 @@ similar to `dynvpn/files/swanctl.conf` in this repository.
 1. Place the keys for the `openvpn` user, created earlier (in the `jail` step), in 
 `~dynvpn/.ssh/` as `id.openvpn` and `id.openvpn.pub`.
 1. Configure `local.yml` and `global.yml` based on the samples provided
+1. Install `dynvpn` as a Python package with dependencies using `pip` and the
+provided `pyproject.toml`; alternatively, install the dependencies manually
+and add the `src` directory to your `PYTHONPATH`.
 
 
 Once these steps are completed, it should be possible to run the `dynvpn.py`
 program on multiple IPsec-connected hosts to maintain VPN connectivity in
 a fault-tolerant manner:
 ```
-dynvpn@ipsec.host1 $ python3.11 dynvpn.py --site-id MYSITE
+dynvpn@ipsec.host1 $ python3.11 -m dynvpn --site-id MYSITE --local-config local.yml --global-config global.yml
 ```
+
+

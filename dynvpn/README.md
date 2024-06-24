@@ -1,7 +1,8 @@
 # `dynvpn.py `
 TODO markdown format
+TODO 2024-06-23: This document needs updating after recent changes to `dynvpn`
 
-Currently, `dynvpn.py` requires Python 3.11 or newer.
+Currently, `dynvpn` requires Python 3.11 or newer.
 
 
 ### Overview
@@ -47,7 +48,7 @@ unless that VPN session is already online elsewhere.
 
 
 Online: 
-    The VPN connection is functioning and it's currently the unique one (with this ID and anycast_addr) 
+    The VPN connection is functioning and it's currently the unique one (with this vpn_id and anycast_addr) 
     which is in use. (Technically, there may be a brief period between updates when more than one is Online,
     before secondaries transition to Replica status)
 
@@ -138,3 +139,6 @@ actually carry out their tasks, such as starting/stopping VPN processes, adding/
 for connectivity. Because of this we can test `dynvpn.py` using a set of test scripts. These scripts simulate the presence
 of the VPN process using empty files on the filesystem; as long as the file exists, the VPN is considered to be online.
 Failover is tested by deleting the file on one host. See the `test` sub-directory.
+
+See `SETUP.md` for more specific instructions
+
