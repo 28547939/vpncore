@@ -2,6 +2,7 @@
 **/*.swp
 **/*.swo.*
 **/*.swp.*
+*.pyc
 dynvpn/test/state/*
 dynvpn/global.yml
 dynvpn/local.yml
