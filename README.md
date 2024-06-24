@@ -1,5 +1,5 @@
 # vpncore
-## IPsec WAN "VPN concentrator" (FreeBSD)
+## IPsec WAN "VPN concentrator" 
 
 
 Major components of this repository:
@@ -8,20 +8,11 @@ Major components of this repository:
 * Policy-based forwarding DNS server supporting blocklists and authoritative 
 `A` and `PTR` records (`vpndns`), and caching based on TTL, with HTTP interface	
 * VPN connection/session failover system to monitor connection availability and update
-BGP anycast routes appropriately (`dynvpn.py`)
+BGP anycast routes appropriately (`dynvpn` package), aiming to keep logical VPN endpoints
+highly available 
 * Various FreeBSD jail-related scripts (in `jail/`) which are used to 
-implement the design described in this document 
-
-
-
-The purpose of this repository is to provide the tools and information 
-needed to implement this design. The expected audience includes those
-who are familiar with the relevant technology but who have not necessarily
-worked through all the details involved in building and/or deploying
-such a system.
-
-See `SETUP.md` for a configuration overview and an example of specific installation steps for 
-all three components (`vpndns`, `dynvpn`, and VPN jail/container setup).
+implement the design described in this document. This makes the repository partly specific 
+to FreeBSD, but the design can also be supported on Linux without issue.
 
 What problem does this system solve?
 
@@ -32,8 +23,16 @@ What problem does this system solve?
  is introduced between clients and VPN endpoints.
 
 
-The repository, aside from this document, is partly specific to FreeBSD, but this
-design can also be supported on Linux without issue.
+The purpose of this repository is to provide the tools and information 
+needed to implement this system. The expected audience includes those
+who are familiar with the relevant technology but who have not necessarily
+worked through all the details involved in building and/or deploying
+such a system.
+
+
+See `SETUP.md` for a configuration overview and an example of specific installation steps for 
+all three components (`vpndns`, `dynvpn`, and VPN jail/container setup).
+
 
 #### Note on VPN containers
 
