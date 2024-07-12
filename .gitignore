@@ -18,3 +18,4 @@ jail/etc/gre/*
 jail/etc/vpn/*
 !jail/etc/vpn/sample
 jail/etc/vars.sh
+.vscode
