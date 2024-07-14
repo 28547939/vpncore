@@ -9,7 +9,7 @@ Major components of this repository:
 `A` and `PTR` records (`vpndns`), and caching based on TTL, with HTTP interface	
 * VPN connection/session failover system to monitor connection availability and update
 BGP anycast routes appropriately (`dynvpn` package), aiming to keep logical VPN endpoints
-highly available 
+highly available. `dynvpn` is still experimental and in active development.
 * Various FreeBSD jail-related scripts (in `jail/`) which are used to 
 implement the design described in this document. This makes the repository partly specific 
 to FreeBSD, but the design can also be supported on Linux without issue.
@@ -27,7 +27,10 @@ The purpose of this repository is to provide the tools and information
 needed to implement this system. The expected audience includes those
 who are familiar with the relevant technology but who have not necessarily
 worked through all the details involved in building and/or deploying
-such a system.
+such a system. 
+
+The software and scripts are still prototypes and not intended
+to be production-ready.
 
 
 See `SETUP.md` for a configuration overview and an example of specific installation steps for 
@@ -41,16 +44,16 @@ configured statically with default routes through GRE, or their traffic is direc
 through a GRE tunnel on a router somewhere the default route, to access default routes provided
 by the remote tunnel endpoints (residing on "VPN containers").
 
-GRE tunnel endpoints (inside "VPN containers") on remote hosts are accessed over the WAN, 
+In this way, GRE tunnel endpoints (inside "VPN containers") on remote hosts are accessed over the (IPsec) WAN, 
 and the endpoint addresses can be
 anycast to take advantage of routing failover among multiple instances when using BGP to advertise the addresses
-(but see the discussion below under `dynvpn.py`).
+(but see the discussion below under `dynvpn`).
 Endpoint containers ("VPN containers") use OpenVPN or Wireguard
 to connect the clients to the Internet, and the containers use NAT to decouple client resolver configuration
 from the dynamic resolver config obtained from the VPN provider.
 
 The `vpndns` DNS server (Perl) primarily forwards requests, acting in tandem with the VPN containers' NAT to ensure
-client requests are directed through the appropriate VPN session; it can also be used indepedently to
+client requests are directed through the appropriate VPN container; it can also be used indepedently to
 provide DNS resolution for clients which do not use any VPN container.
 
 `vpndns` supports DNS blocklists intended to handle large lists that are typical with 
@@ -93,25 +96,25 @@ host's internal network to other hosts via site-to-site IPsec tunnel(s).
    * The IPsec container, with its own virtual network stack like any other container,
 acts as a router for the host and its containers: packets to and from remote
 sites pass through the container in both directions.
-   * If VPN failover/high availability is desired between hosts, a `dynvpn.py` 
+   * If VPN failover/high availability is desired between hosts, a `dynvpn` 
 instance on each host's IPsec container manages the election of a primary
 for each VPN instance and communicates anycast routing changes to the local
 BGP daemon via static route.
      * The content of the `dynvpn` subdirectory under this repository it intended to be
-     deployed to, and run from, the `ipsec` container.
+     deployed to, and run inside, the `ipsec` container.
 
 2. **VPN containers**: providing Internet connectivity to clients via an external
 VPN connection, such as OpenVPN or Wireguard. Generally, client traffic
 is directed into the VPN container via GRE route or SOCKS connection.
-   * **`vpndns` container**: each host as a unique `vpndns` container, 
+3. **`vpndns` container**: each host as a unique `vpndns` container, 
 running a `vpndns` instance, which forwards DNS
 requests (originating from that host or from elsewhere) to VPN containers on 
 that host, based on policy.
 It also supports other functionality - see below.
 An implementation is included in this repository.
-3. **Internal/WAN services**: services which are not necessarily connected to the Internet but
+4. **Internal/WAN services**: services which are not necessarily connected to the Internet but
 which are accessible across the WAN (labeled "Internal WAN container" above).
-4. Other containers: whatever other containers the host might have.
+5. Other containers: whatever other containers the host might have.
 
 
 
@@ -157,11 +160,11 @@ policy.
 establish the forwarding between sites rather than relying on the less
 accessible traffic selector policy configuration.
 * MTU configuration
- * It's not always possible to establish MTU when using a policy-based
+  * It's not always possible to establish MTU when using a policy-based
 configuration, but this is easy to specify on an `ipsec` interface when
 using a route-based configuration.
 * `tcpdump`/BPF accessibility
- * Examining traffic with `tcpdump` is easier when the traffic is presented
+  * Examining traffic with `tcpdump` is easier when the traffic is presented
 unencrypted on an interface.
 
 
@@ -186,11 +189,11 @@ The relevant configuration is essentially the following:
 provided)
 2. Interface configuration: `rc.conf.local` (FreeBSD) or NetworkManager, etc 
 (Linux), to create necessary GRE and IPsec tunnel interfaces.
-3. Routing: in this design, FRR adds local routes for other hosts on the
+3. Routing: in this design, the `FRRouting` daemon (`bgpd`) adds local routes for other hosts on the
 WAN automatically using BGP. 
 Routes that need to be accessible to other hosts
 on the WAN should either be configured statically (e.g. in `rc.conf.local`) or
-specified in the FRRouting configuration. A sample configuration is provided in
+specified in the FRRouting configuration. A sample configuration for FRR is provided in
 `misc/bgpd.conf`.
 
 
@@ -218,9 +221,10 @@ the remote `/24` from being directly connected in our routing table; if it is,
 then failure of the IPsec tunnel will make that entire remote  `/24` unavailable.
 With the netmask correct, the remote `/24` (except for `192.168.1.4`) will be 
 accessed through another 
-path on the WAN thanks to BGP in case the link fails.
+path on the WAN thanks to BGP in case the link fails (i.e. the virtual link, 
+in the form of the IPsec tunnel).
 
-The `reqid` parameter can be arbitrary and just needs to be equal to the 
+The `reqid` parameter can be any positive number and just needs to be equal to the 
 parameter in the StrongSwan configuration (see example `swanctl.conf`).
 
 
@@ -310,7 +314,7 @@ It incorporates the features that are discussed in this document, as applicable.
 
 
 
-### RE: `dynvpn.py` and high availability for I and II (containers and hosts)
+### RE: `dynvpn` and high availability for I and II (containers and hosts)
 
 
 #### High availability: WAN connectivity - routing with BGP
@@ -368,7 +372,7 @@ generally limit the number of active VPN sessions, means that
 it's best to implement high availability with only one active VPN container
 at a time, with a replica coming online if the primary fails.
 
-This is implemented in `dynvpn.py`. Each VPN container can be activated on
+This is the purpose of the `dynvpn` program. Each VPN container can be activated on
 any host in the WAN, and ordering of primary/replica hosts is statically 
 configured. The program checks for connectivity in the active VPN containers,
 and notifies peers of state changes, in addition to monitoring
@@ -376,16 +380,17 @@ peers with a heartbeat. Only the active VPN container's anycast address is
 advertised on BGP, and this is changed appropriately when failover takes place;
 that is, when the container on one host fails and the corresponding container on
 another host is automatically activated, the BGP route is automatically 
-advertised on the new host instead of the old.
+advertised on the new host instead of the old. This switch can also be performed
+manually by the administrator through the HTTP API.
 
 Regarding routes, what we do specifically is set FRR to redistribute local 
 static routes (but not directly connected ones), and set a static route
 for the anycast address with next hop equal to the IPsec container's
 default gateway (which should be the host's virtual bridge). In this 
 configuration, the anycast addresses are on a distinct subnet from the
-host's `/24`, so the host has two virtual bridges, and conceptually, the
+hosts' `/24` networks, so the host has two virtual bridges, and conceptually, the
 main virtual bridge routes to the anycast bridge once the packet exits
-the IPsec container. When `dynvpn.py` installs the local static route
+the IPsec container. When `dynvpn` installs the local static route
 for the anycast address, FRR advertises it over BGP, making the VPN accessible
 to clients.
 
@@ -402,14 +407,14 @@ The diagram below, and the notes that follow, describe in detail the process of
 DNS resolution as performed by the `vpndns` server. This service can be used 
 by any client, but it's mainly intended to automatically decouple the resolver
 configuration of VPN container clients from that VPN container's dynamic
-resolver configuration.
+resolver configuration (IP address). 
 
 VPN container clients statically configure the address of the `vpndns` server as
 their resolver. Typically, clients route their access to the server through
-their route to the VPN container (which is directly connected thanks to the GRE
+their route to the VPN container (which the client is directly connected to thanks to the GRE
 tunnel interface), so that the VPN container itself is automatically 
 chosen by the `vpndns` server to handle the request (because of NAT to the container's 
-jail address; see details below).
+jail address). This is described in more detail below.
 
 Clients which are not interacting with VPN containers can still use the `vpndns`
 server for resolution, in which case the `vpndns` server can configure the correct 
