@@ -58,7 +58,7 @@ class client(http_component):
                         await self.node.handle_site_status(site.id, site_status_t.Offline)
 
                         
-        except aiohttp.ClientError as e:
+        except (aiohttp.ClientError, asyncio.TimeoutError) as e:
             self.node._logger.warning(f'pull_state({site.id}): failed to connect: {e}') 
             await self.node.handle_site_status(site.id, site_status_t.Offline)
 
@@ -177,6 +177,31 @@ class server(http_component):
         self.node._logger.debug(f'received dump_state from {request.remote}')
         return self.node._encode_state()
 
+    async def task_state_handler(self, request, match):
+        ret={}
+
+        for t in self.node.tasks:
+            x=ret[t.get_name()]={
+                'frames': []
+            }
+
+            fs=t.get_stack()
+            for frame in fs:
+                c=frame.f_code
+                #finfo={}
+                #finfo['code_info']=
+
+                x['frames'].append( (c.co_filename, frame.f_lineno, c.co_qualname) )
+
+        
+        return ret
+
+
+            
+
+
+
+
 
     # TODO API access / HTTP functionality in separate module as it expands
     async def start(self):
@@ -191,6 +216,7 @@ class server(http_component):
         router.add_post('/vpn/set_offline/{id}', self.vpn_offline_handler)
         router.add_post('/vpn/set_replica/{id}', self.vpn_replica_handler)
         router.add_get('/dump_state', self.dump_state_handler)
+        router.add_get('/task_state', self.task_state_handler)
 
         async def handler(request):
             match=await router.resolve(request)
