@@ -6,6 +6,8 @@ replica_priority:
         - host1
         - host2
 
+anycast_addr:
+    vpn1: '10.0.254.101'
 
 sites:
     host1:
@@ -16,7 +18,7 @@ sites:
 
         # VPNs which are present on this host
         vpn:
-            - vpn1
+            vpn1: '192.168.1.101'
             
 
 
@@ -25,5 +27,5 @@ sites:
         peer_port: 5000
         gateway_addr: '192.168.2.1'
         vpn:
-            - vpn1
+            vpn1: '192.168.2.101'
             

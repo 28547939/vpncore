@@ -16,16 +16,6 @@ script_path: "./test/scripts"
 # of this repository
 local_vpn_dir: "/mnt/vpn"
 
-# configure how often peers 'ping'/check one another
-# ( 
-#   check interval (how often to check; starts on receipt of response) (seconds),  
-#   check timeout (seconds), 
-#   number of retries (timeouts) before marking as unavailable 
-# )
-# in seconds
-timers: 
-    host2: [5, 10, 3]
-
 
 # how long to wait after launch until checking and acting on peer state
 #start_delay: 10 TODO most likely removing this
@@ -44,10 +34,18 @@ timers:
 # if set to 0, we never attempt to transition to Offline
 failed_status_timeout: 0
 
+
+# 
+
 # how many seconds to wait between attempts to reach a peer
 pull_interval: 30
-# how many seconds to wait without a response from a peer before marking its site Offline
+# how many seconds to wait without a response from a peer before marking the attempt as failed
 pull_timeout: 10
+# how many failed attempts to reach a peer before marking its site as Offline
+# retries are performed immediately
+# after it's marked Offline, subsequent pulls (checking for the site coming back online) will not retry
+pull_retries: 1
+
 
 
 # connectivity checks for local VPN containers which are in the Online state
@@ -61,9 +59,5 @@ local_vpn_check_timeout: 5
 # >0: if the check succeeds within this number of retries, register the check as successfull
 local_vpn_check_retries: 3
 
-# string value (anycast address) indicates a VPN which does not exist locally
-# [ local, anycast ] indicates a VPN which does exist locally
-vpn:
-    vpn1: [ '192.168.1.101', '10.0.254.101' ]
 
 

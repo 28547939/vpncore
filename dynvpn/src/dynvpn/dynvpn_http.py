@@ -35,36 +35,55 @@ class client(http_component):
 
     
     async def pull_state(self, site : site_t, handler):
+        retries_completed=-1
 
-        pull_timeout=aiohttp.ClientTimeout(total=site.pull_timeout.seconds)
-        try:
-            async with aiohttp.ClientSession(timeout=pull_timeout) as session:
-                async with session.get(f'http://{site.peer_addr}:{site.peer_port}/peer/pull_state', 
-                    data=json.dumps({'site_id': self.node.site_id})) as resp:
+        async def handle_failure():
+            nonlocal retries_completed
+            retries_completed += 1
 
-                    #self.node._logger.debug(f'pull_state({site.id}): got response {resp.status} from {site.peer_addr}')
-
-                    if resp.status == 200:
-                        await self.node.handle_site_status(site.id, site_status_t.Online)
-
-                        data=await resp.content.read()
-                        state=self.node._decode_state(data)
-                        state=state['state']
-
-                        #for (vpn_id, status) in state['vpn'].items():
-                        for (vpn_id, status) in state[site.id]['vpn'].items():
-                            handler(site.id, vpn_id, status)
-                    else:
-                        await self.node.handle_site_status(site.id, site_status_t.Offline)
-
-                        
-        except (aiohttp.ClientError, asyncio.TimeoutError) as e:
-            if isinstance(e, asyncio.TimeoutError):
-                estr='timed out'
+            if site.pull_retries is not None and site.pull_retries > retries_completed:
+                # retry immediately
+                self.node._logger.info(f'pull_state({site.id}): retrying '+
+                    f'({retries_completed+1}/{site.pull_retries})'
+                )
+                await do_pull()
             else:
-                estr=str(e)
-            self.node._logger.warning(f'pull_state({site.id}): failed to connect: {estr}') 
-            await self.node.handle_site_status(site.id, site_status_t.Offline)
+                await self.node.handle_site_status(site.id, site_status_t.Offline)
+
+
+        async def do_pull():
+
+            pull_timeout=aiohttp.ClientTimeout(total=site.pull_timeout.seconds)
+            try:
+                async with aiohttp.ClientSession(timeout=pull_timeout) as session:
+                    async with session.get(f'http://{site.peer_addr}:{site.peer_port}/peer/pull_state', 
+                        data=json.dumps({'site_id': self.node.site_id})) as resp:
+
+                        #self.node._logger.debug(f'pull_state({site.id}): got response {resp.status} from {site.peer_addr}')
+
+                        if resp.status == 200:
+                            await self.node.handle_site_status(site.id, site_status_t.Online)
+
+                            data=await resp.content.read()
+                            state=self.node._decode_state(data)
+                            state=state['state']
+
+                            #for (vpn_id, status) in state['vpn'].items():
+                            for (vpn_id, status) in state[site.id]['vpn'].items():
+                                handler(site.id, vpn_id, status)
+                        else:
+                            await handle_failure()
+
+                            
+            except (aiohttp.ClientError, asyncio.TimeoutError) as e:
+                if isinstance(e, asyncio.TimeoutError):
+                    estr='timed out'
+                else:
+                    estr=str(e)
+                self.node._logger.warning(f'pull_state({site.id}): failed to connect: {estr}') 
+                await handle_failure()
+
+        await do_pull()
 
 class server(http_component):
 
