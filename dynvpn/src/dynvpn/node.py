@@ -134,7 +134,7 @@ class node():
 
         # wait for other nodes 
         # TODO - need to use a barrier
-        await asyncio.sleep(float(self.local_config['start_delay']))
+        #await asyncio.sleep(float(self.local_config['start_delay']))
 
         # for nodes which are already established, we will get an idea of the state of the network before taking
         #   any action.
@@ -215,21 +215,23 @@ class node():
                         name=f'{site_id}_pull-state'
                     )
                 )
-        
+       # TODO history of task processing 
         while len(self.tasks) > 0:
             try:
                 completed, _=await asyncio.wait(
                     self.tasks, return_when=asyncio.FIRST_COMPLETED
                 )
                 for t in completed:
+                    tname=t.get_name()
                     try:
                         if e := t.exception():
                             raise e
                     except asyncio.CancelledError:
-                        self._logger.info(f'task {t.get_name()} was cancelled')
+                        self._logger.info(f'task {tname} was cancelled')
 
                     try:
                         self.tasks.remove(t)
+                        self._logger.info('task {tname} completed')
                     except ValueError:
                         self._logger.error('task completed but not present in self.tasks')
                     
@@ -601,7 +603,8 @@ class node():
             self._logger.warning(f'vpn_online({vpn_id}): failed but eligible_failover is empty - retrying')
             await self.vpn_online(vpn_id)
         else:
-            timeout=self.local_config['failed_status_timeout'] if 'failed_status_timeout' in self.local_config else 0
+            timeout=self.local_config['failed_status_timeout'] \
+                if 'failed_status_timeout' in self.local_config else 0
 
             if timeout > 0:
                 while True:
@@ -664,19 +667,22 @@ class node():
         # TODO check it's a local vpn
         v=self._local_vpn_obj(vpn_id)
 
-        (ret, stdout, stderr)=await self._cmd(
-            os.path.join(self._script_path, 'vpn-check-online.sh'),
-            str(v.local_addr),
+        for _ in range(-1, self.local_config['local_vpn_check_retries']):
 
-            # for testing purposes
-            str(vpn_id),
-        )
+            (ret, stdout, stderr)=await self._cmd(
+                os.path.join(self._script_path, 'vpn-check-online.sh'),
+                str(v.local_addr),
+                str(self.local_config['local_vpn_check_timeout']),
 
-        if ret == 0:
-            return True
-        else:
-            self._logger.info(f'check_local_vpn_connectivity({vpn_id}): detected not online: stdout={stdout} stderr={stderr}')
-            return False
+                # for testing purposes
+                str(vpn_id),
+            )
+
+            if ret == 0:
+                return True
+
+        self._logger.info(f'check_local_vpn_connectivity({vpn_id}): detected not online: stdout={stdout} stderr={stderr}')
+        return False
 
 
 

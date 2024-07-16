@@ -28,7 +28,7 @@ timers:
 
 
 # how long to wait after launch until checking and acting on peer state
-start_delay: 10
+#start_delay: 10 TODO most likely removing this
 
 # not yet implemented
 #failed_retry_timeout: 120
@@ -36,14 +36,30 @@ start_delay: 10
 #primary_restart_timer: 300
 
 # VPN transitions to Offline status after being in Failed for this many seconds,
-# assuming a replica has come online; if not, it will continue trying to go offline
-# indefinitely
-# 0 seconds => never timeout
+#   assuming another instance of the VPN has come online
+#
+# if none has, then we continue trying to transition to Offline every 
+#   failed_status_timeout seconds 
+#
+# if set to 0, we never attempt to transition to Offline
 failed_status_timeout: 0
 
-# how often to check connectivity on a local VPN session that is in the 
-# Online state
+# how many seconds to wait between attempts to reach a peer
+pull_interval: 30
+# how many seconds to wait without a response from a peer before marking its site Offline
+pull_timeout: 10
+
+
+# connectivity checks for local VPN containers which are in the Online state
+# how often to check connectivity (seconds)
 local_vpn_check_interval: 10
+# how long to wait for connectivity check to succeed before assuming failure  (seconds)
+local_vpn_check_timeout: 5
+# in the case of failure, how many times to retry the check before actually registering
+# the check as failed
+# 0 means no retries - register failure on the first failure of the check
+# >0: if the check succeeds within this number of retries, register the check as successfull
+local_vpn_check_retries: 3
 
 # string value (anycast address) indicates a VPN which does not exist locally
 # [ local, anycast ] indicates a VPN which does exist locally
