@@ -59,7 +59,11 @@ class client(http_component):
 
                         
         except (aiohttp.ClientError, asyncio.TimeoutError) as e:
-            self.node._logger.warning(f'pull_state({site.id}): failed to connect: {e}') 
+            if isinstance(e, asyncio.TimeoutError):
+                estr='timed out'
+            else:
+                estr=str(e)
+            self.node._logger.warning(f'pull_state({site.id}): failed to connect: {estr}') 
             await self.node.handle_site_status(site.id, site_status_t.Offline)
 
 class server(http_component):

@@ -8,6 +8,18 @@ import sys
 
 from dynvpn.node import node
 
+local_defaults = {
+
+    'failed_status_timeout': 0,
+
+    'local_vpn_check_interval': 10,
+    'local_vpn_check_timeout': 3,
+    'local_vpn_check_retries': 2,
+
+    'pull_interval': 30,
+    'pull_timeout': 10,
+}
+
 async def main():
 
     prs=argparse.ArgumentParser(
@@ -36,6 +48,10 @@ async def main():
 
     with open(args["global_config"], 'rb') as f:
         global_config=yaml.safe_load(f)
+
+    for k, default in local_defaults.items():
+        if k not in local_config:
+            local_config[k]=default
 
     instance = node(args['site_id'], local_config, global_config, logger)
     try:
