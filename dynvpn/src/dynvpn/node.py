@@ -39,6 +39,7 @@ class node():
         self._script_path=local_config['script_path']
 
         sites_config=global_config['sites']
+        anycast_addr=global_config['anycast_addr']
         self.sites={}
 
         self.local_config = local_config
@@ -60,7 +61,7 @@ class node():
         ))
 
         for (site_id, site_config) in sites_config.items():
-            self.sites[site_id]=site_t.load(self, site_id, site_config, self.local_config['vpn'])
+            self.sites[site_id]=site_t.load(self, site_id, site_config, anycast_addr)
             self.sites[site_id].status = site_status_t.Pending
             for (_, vpn) in self.sites[site_id].vpn.items(): 
                 vpn.status = vpn_status_t.Pending

@@ -82,9 +82,7 @@ class site_t():
     """
     pull_interval : Optional[int]
     pull_timeout : Optional[int]
-
-    # not yet implemented
-    #timeout_retries : Optional[int]
+    pull_retries : Optional[int]
 
     def resolve_vpn_anycast(self, id : str) -> Optional[IPv4Address]:
         try:
@@ -104,45 +102,38 @@ class site_t():
     # local_vpn_config is the `vpn` key in the local.yml config
     # site_config is the site's entry from the `sites` key in the global.yml config
     @staticmethod
-    def load(node, site_id, site_config, local_vpn_config):
+    def load(node, site_id, site_config, anycast_addr_map):
         # separate map for VPNs for each peer, even though each vpn object is initialized to be identical
         vpns={}
 
-        for vpn_id in site_config['vpn']:
+        for vpn_id, local_addr in site_config['vpn'].items():
 
-            if vpn_id not in local_vpn_config:
-                node._logger.info(f"Not tracking remote VPN on {site_id} which is not configured locally: {vpn_id}")
+            if vpn_id not in anycast_addr_map:
+                node._logger.info(f"skipping VPN {vpn_id} on {site_id}: "+
+                    "does not have an entry under anycast_addr in the global config")
                 continue
 
-            if len(local_vpn_config[vpn_id]) != 2:
-                node._logger.error(f"Local VPN %s provided invalid arguments, skipping: {node.local_config['vpn'][vpn_id]}")
-                continue
 
-            (local_addr, anycast_addr)=local_vpn_config[vpn_id]
+            anycast_addr=anycast_addr_map[vpn_id]
 
             vpn_obj=vpn_t(
                 id=vpn_id,
                 site_id=site_id,
                 status=vpn_status_t.Pending,
-                local_addr=local_addr,
-                anycast_addr=anycast_addr
+                local_addr=ip_address(local_addr),
+                anycast_addr=ip_address(anycast_addr)
             )
-            
-            for (i, k) in zip([0, 1], ['local_addr', 'anycast_addr']):
-                setattr(
-                    vpn_obj, k, 
-                    # first argument is local addr, second is anycast addr
-                    ip_address(node.local_config['vpn'][vpn_id][i])
-                )
 
             vpns[vpn_id]=vpn_obj
 
         if site_id != node.local_config['site_id']:
-            pull_interval = datetime.timedelta(seconds=node.local_config['timers'][site_id][0])
-            pull_timeout = datetime.timedelta(seconds=node.local_config['timers'][site_id][1])
+            pull_interval = datetime.timedelta(seconds=node.local_config['pull_interval'])
+            pull_timeout = datetime.timedelta(seconds=node.local_config['pull_timeout'])
+            pull_retries = node.local_config['pull_retries']
         else:
             pull_interval=None
             pull_timeout=None
+            pull_retries=None
 
         return site_t(
             site_id,
@@ -152,5 +143,6 @@ class site_t():
             vpn=vpns,
             pull_interval=pull_interval,
             pull_timeout=pull_timeout,
+            pull_retries=pull_retries,
             status=site_status_t.Pending
         )
