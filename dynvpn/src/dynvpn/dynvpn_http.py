@@ -176,7 +176,11 @@ class server(http_component):
     """
     async def vpn_online_handler(self, request, match):
         if 'id' in match:
-            await self.node.vpn_online(match['id'], True)
+            try:
+                await self.node.vpn_online(match['id'], True, timeout_throw=True)
+                return {}
+            except TimeoutError:
+                return { 'error': 'timed out' }
         else:
             return { 'error': 'missing required key: id' }
 
