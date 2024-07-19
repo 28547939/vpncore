@@ -3,6 +3,8 @@ from enum import Enum, auto
 from typing import Optional, Dict, Tuple, List
 
 import datetime
+import functools
+import asyncio
 
 from dataclasses import dataclass
 from ipaddress import IPv4Address, IPv4Network, ip_address
@@ -99,6 +101,7 @@ class site_t():
             return None
 
 
+
     # local_vpn_config is the `vpn` key in the local.yml config
     # site_config is the site's entry from the `sites` key in the global.yml config
     @staticmethod
@@ -146,3 +149,20 @@ class site_t():
             pull_retries=pull_retries,
             status=site_status_t.Pending
         )
+
+
+def timeout_wrap(f, timeout):
+    @functools.wraps(f)
+    async def w(inst, *args, **kwargs):
+        try:
+            async with asyncio.timeout(timeout):
+                return await f(inst, *args, **kwargs)
+        except asyncio.TimeoutError:
+
+            # for now, always assume that the object in question has a logger 
+            # stored here
+            inst._logger.warning(f.__name__ +f': timed out after {timeout} seconds')
+            raise
+
+    return w
+            

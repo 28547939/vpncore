@@ -1,6 +1,7 @@
 import sys
 import os
 import subprocess
+import functools
 import asyncio
 
 import traceback
@@ -15,7 +16,7 @@ import logging
 
 
 
-from dynvpn.common import vpn_status_t, site_status_t, vpn_t, site_t, str_to_vpn_status_t
+from dynvpn.common import vpn_status_t, site_status_t, vpn_t, site_t, str_to_vpn_status_t, timeout_wrap
 import dynvpn.processor as processor
 from dynvpn import dynvpn_http
 
@@ -23,6 +24,24 @@ def log():
     pass
 
 
+def timeout_wrap(f, throw_default=False):
+    @functools.wraps(f)
+    async def w(node, *args, timeout_throw=None, timeout=None, **kwargs):
+        if timeout_throw is None:
+            timeout_throw=throw_default
+
+        if timeout is None:
+            timeout=node.local_config['default_timeout']
+
+        try:
+            async with asyncio.timeout(timeout):
+                return await f(node, *args, **kwargs)
+        except TimeoutError:
+            node._logger.warning(f.__name__ +f': timed out after {timeout} seconds')
+            if timeout_throw is True:
+                raise
+
+    return w
 
 
 class node():
@@ -159,7 +178,7 @@ class node():
                 self._logger.info(f'start(): {vpn_id}: no other replicas online, maintaining Online state')
                 #self._logger.debug(f'start(): {vpn_id}: {self.sites}')
                 #await self._set_status(vpn_id, vs.Online, False)
-                await self.vpn_online(vpn_id, False)
+                await self.vpn_online(vpn_id, False, timeout_throw=False)
             else:
                 self._logger.info(f'start(): {vpn_id}: peer is online, setting state to Replica and taking ours offline')
                 await self._set_status(vpn_id, vs.Replica, False)
@@ -232,9 +251,9 @@ class node():
 
                     try:
                         self.tasks.remove(t)
-                        self._logger.info('task {tname} completed')
+                        self._logger.info(f'task {tname} ended')
                     except ValueError:
-                        self._logger.error('task completed but not present in self.tasks')
+                        self._logger.error('task ended but not present in self.tasks')
                     
             except Exception as e:
                 print(traceback.format_exc())
@@ -263,10 +282,9 @@ class node():
         async def f(vpn_id, iter):
             while iter is None or (iter := iter-1) >= 0:
                 
-                if self.get_local_vpn(vpn_id).status != vpn_status_t.Online:
+                if self.get_local_vpn(vpn_id).status not in  [ vpn_status_t.Online, vpn_status_t.Pending ]:
                     # the VPN may have been manually set offline locally
-                    # this may also mean that there have been multiple calls to vpn_online within a short time period
-                    self._logger.info(f'check_vpn_task({vpn_id}): VPN is not Online, exiting task')
+                    self._logger.info(f'check_vpn_task({vpn_id}): VPN is not Online or Pending, exiting task')
                     return
 
                 await asyncio.sleep(float(self.local_config['local_vpn_check_interval']))
@@ -363,8 +381,37 @@ class node():
         await self.http_client.pull_state(site, handler)
 
 
+    """
+    timeout handling:
+        treated as a failure, so the timeout (currently set by default_timeout) should be high enough 
+        to avoid accidentally prematurely shutting down a VPN connection which was just taking time 
+        to start 
+    
+    TODO - possibly encapsulate every major operation like this in a separate class with timeout and
+    failure handling, and cleanup
+    """
+    async def vpn_online(self, vpn_id : str, broadcast : bool = True, timeout_throw=True):
 
-    async def vpn_online(self, vpn_id : str, broadcast : bool = True) -> Optional[bool]:
+        try:
+            success=await self._vpn_online_impl(vpn_id, broadcast, timeout_throw=True)
+            if success is False:
+                return False
+            return True
+        except TimeoutError:
+            await self._set_local_vpn_offline(vpn_id, True)
+            await self._set_status(vpn_id, vpn_status_t.Failed, broadcast)
+
+            if timeout_throw is True:
+                raise
+            return False
+        
+    """
+    this timeout includes any necessary calls to handle_local_failure, which will essentially retry
+    vpn_online again, and so on. that recursion, between vpn_online and handle_local_failure, is still
+    controlled by the outermost timeout (this one)
+    """
+    @timeout_wrap
+    async def _vpn_online_impl(self, vpn_id : str, broadcast : bool = True) -> Optional[bool]:
         vs=vpn_status_t
 
         #self._logger.info(f'vpn_online({vpn_id}): status={self.get_local_vpn(vpn_id).status}')
@@ -402,12 +449,10 @@ class node():
 
             # begin periodic online check for this VPN
             await self.start_check_vpn_task(vpn_id)
-
         else:
-            # clean up
-            await self._set_local_vpn_offline(vpn_id)
-            # currently, this will broadcast state to peers, even if our broadcast argument (to vpn_online) is False
-            await self.handle_local_failure(vpn_id)
+            await self.handle_local_failure(vpn_id, broadcast=broadcast)
+
+        return success
 
     # TODO separate `vpn_replica` function to set state to Replica, to match the API functions set_*
     async def vpn_offline(self, vpn_id : str, broadcast : bool = True, s : vpn_status_t = vpn_status_t.Offline):
@@ -596,14 +641,18 @@ class node():
     called when we attempt to bring a VPN online but fail (Pending -> Failed), or
     when an online VPN fails (Online -> Failed)
     """
-    async def handle_local_failure(self, vpn_id : str):
-        await self._set_status(vpn_id, vpn_status_t.Failed)
+    async def handle_local_failure(self, vpn_id : str, broadcast=True):
+        await self._set_status(vpn_id, vpn_status_t.Failed, broadcast=broadcast)
 
         # restart immediately if there are no other available sites with that VPN
         if len(self._eligible_failover(vpn_id)) == 0:
+            await self._set_local_vpn_offline(vpn_id, remove_route=False)
+
             self._logger.warning(f'vpn_online({vpn_id}): failed but eligible_failover is empty - retrying')
-            await self.vpn_online(vpn_id)
+            await self.vpn_online(vpn_id, timeout_throw=True, broadcast=broadcast)
+
         else:
+            await self._set_local_vpn_offline(vpn_id, remove_route=True)
             timeout=self.local_config['failed_status_timeout'] \
                 if 'failed_status_timeout' in self.local_config else 0
 
