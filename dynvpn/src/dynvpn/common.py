@@ -150,19 +150,3 @@ class site_t():
             status=site_status_t.Pending
         )
 
-
-def timeout_wrap(f, timeout):
-    @functools.wraps(f)
-    async def w(inst, *args, **kwargs):
-        try:
-            async with asyncio.timeout(timeout):
-                return await f(inst, *args, **kwargs)
-        except asyncio.TimeoutError:
-
-            # for now, always assume that the object in question has a logger 
-            # stored here
-            inst._logger.warning(f.__name__ +f': timed out after {timeout} seconds')
-            raise
-
-    return w
-            
