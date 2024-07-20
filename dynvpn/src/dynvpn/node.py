@@ -450,6 +450,7 @@ class node():
                 await self._set_status(vpn_id, vs.Online, broadcast)
                 # will check first for an existing task
                 await self.start_check_vpn_task(vpn_id)
+
                 return
             else:
                 self._logger.info(f'vpn_online({vpn_id}): container has stale process')
@@ -821,7 +822,7 @@ class node():
             self._logger.error(f'_set_local_vpn_online({vpn_id}): online script failed (stdout={stdout_enc}, stderr={stderr_enc})')
             return False
 
-        sleep_time=5
+        sleep_time=self.local_config['online_check_delay']
         self._logger.info(f'_set_local_vpn_online({vpn_id}): waiting {sleep_time} seconds before connectivity check')
         await asyncio.sleep(sleep_time)
 
