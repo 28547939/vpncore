@@ -123,9 +123,9 @@ sub cache_key {
 }
 
 sub delete {
-    my $key = shift;
+    my ($type, $host) = @_;
 
-    delete $cache->{$key};
+    delete $cache->{&cache_key($type, $host)};
 }
 
 sub exists {
