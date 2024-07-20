@@ -28,6 +28,7 @@ class processor():
         # argument lists
         self.items=deque()
         self.active=False
+        self.discard=False
         self.logger=node._logger
         self.node=node
 
@@ -52,10 +53,14 @@ class processor():
             await self.pending_items.wait()
         
     def add(self, *args, **kwargs):
-        self.items.append( (args, kwargs) )
+        if self.discard is False:
+            self.items.append( (args, kwargs) )
 
-        if self.active:
-            self.pending_items.set()
+            if self.active:
+                self.pending_items.set()
+
+    def set_discard(self, tf):
+        self.discard=tf
     
     def activate(self):
         self.active=True

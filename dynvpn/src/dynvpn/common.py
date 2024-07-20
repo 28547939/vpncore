@@ -49,14 +49,19 @@ class vpn_t():
     id : str
     site_id : str
 
-    # local_addr should be None unless site_id is the local site
     local_addr : Optional[IPv4Address]
     anycast_addr : IPv4Address
 
     status : vpn_status_t
 
+    # only relevant for local VPNs
+    lock : asyncio.Lock
+
     def set_status(self, s : vpn_status_t):
         self.status=s
+
+
+
 
 @dataclass()
 class site_t():
@@ -124,7 +129,8 @@ class site_t():
                 site_id=site_id,
                 status=vpn_status_t.Pending,
                 local_addr=ip_address(local_addr),
-                anycast_addr=ip_address(anycast_addr)
+                anycast_addr=ip_address(anycast_addr),
+                lock=asyncio.Lock()
             )
 
             vpns[vpn_id]=vpn_obj

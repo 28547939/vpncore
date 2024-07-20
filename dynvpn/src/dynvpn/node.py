@@ -16,7 +16,7 @@ import logging
 
 
 
-from dynvpn.common import vpn_status_t, site_status_t, vpn_t, site_t, str_to_vpn_status_t, timeout_wrap
+from dynvpn.common import vpn_status_t, site_status_t, vpn_t, site_t, str_to_vpn_status_t
 import dynvpn.processor as processor
 from dynvpn import dynvpn_http
 
@@ -110,6 +110,14 @@ class node():
 
         processor.peer_vpn_status_first.instance.activate()
 
+        # prevent updates from peers (push state, pull state) from triggering any 
+        # responses or other effects while we initialize
+        processor.peer_vpn_status_second.instance.set_discard(True)
+
+        # protect vpns from any operations (such as setting online, offline) while we initialize
+        for vpn in self.sites[self.site_id].vpn.values():
+            await vpn.lock.acquire()
+
         # TODO potentially factor out these local functions
 
         # only consider peers which are reachable
@@ -178,7 +186,7 @@ class node():
                 self._logger.info(f'start(): {vpn_id}: no other replicas online, maintaining Online state')
                 #self._logger.debug(f'start(): {vpn_id}: {self.sites}')
                 #await self._set_status(vpn_id, vs.Online, False)
-                await self.vpn_online(vpn_id, False, timeout_throw=False)
+                await self.vpn_online(vpn_id, False, timeout_throw=False, lock=False)
             else:
                 self._logger.info(f'start(): {vpn_id}: peer is online, setting state to Replica and taking ours offline')
                 await self._set_status(vpn_id, vs.Replica, False)
@@ -207,7 +215,7 @@ class node():
                     # (note that currently, if vpn_online fails, it will push that)
                     #
                     # if it's already online, we will detect this and use the existing session/connection
-                    await self.vpn_online(vpn_id, False)
+                    await self.vpn_online(vpn_id, False, timeout_throw=False, lock=False)
                 # don't take any action if we're not first - if we're Online, we can stay Online
                 else:
                     pass
@@ -225,6 +233,9 @@ class node():
                 await self._set_status(vpn_id, vs.Replica, False)
 
         await asyncio.sleep(1)
+
+        for vpn in self.sites[self.site_id].vpn.values():
+            vpn.lock.release()
 
         processor.peer_vpn_status_second.instance.activate()
 
@@ -295,11 +306,11 @@ class node():
                     await self.handle_local_failure(vpn_id)
                     return
 
+        name=f'check-vpn_{vpn_id}'
         for x in self.tasks:
-            name=f'check-vpn_{vpn_id}'
 
             if isinstance(x, asyncio.Task) and x.get_name() == name:
-                self._logger.debug(f'start_check_vpn_task: task exists for {vpn_id}')
+                self._logger.warning(f'start_check_vpn_task: task exists for {vpn_id}')
                 return
 
 
@@ -390,16 +401,27 @@ class node():
     TODO - possibly encapsulate every major operation like this in a separate class with timeout and
     failure handling, and cleanup
     """
-    async def vpn_online(self, vpn_id : str, broadcast : bool = True, timeout_throw=True):
+    async def vpn_online(self, vpn_id : str, broadcast : bool = True, timeout_throw=True, lock=True):
+
+        L=self.get_local_vpn(vpn_id).lock
+        if lock == True:
+            self._logger.debug(f'vpn_online({vpn_id}): locking')
+            await L.acquire()
+
 
         try:
             success=await self._vpn_online_impl(vpn_id, broadcast, timeout_throw=True)
+            if lock == True:
+                L.release()
             if success is False:
                 return False
             return True
         except TimeoutError:
             await self._set_local_vpn_offline(vpn_id, True)
             await self._set_status(vpn_id, vpn_status_t.Failed, broadcast)
+
+            if lock == True:
+                L.release()
 
             if timeout_throw is True:
                 raise
@@ -455,8 +477,16 @@ class node():
         return success
 
     # TODO separate `vpn_replica` function to set state to Replica, to match the API functions set_*
-    async def vpn_offline(self, vpn_id : str, broadcast : bool = True, s : vpn_status_t = vpn_status_t.Offline):
+    async def vpn_offline(self, vpn_id : str, broadcast : bool = True,  \
+                s : vpn_status_t = vpn_status_t.Offline,
+                lock=True
+    ):
         vs=vpn_status_t
+
+        L=self.get_local_vpn(vpn_id).lock
+        if lock == True:
+            self._logger.debug(f'vpn_online({vpn_id}): locking')
+            await L.acquire()
 
         for t in self.tasks:
             if t.get_name() == f'check-vpn_{vpn_id}':
@@ -487,6 +517,9 @@ class node():
 
         await self._set_local_vpn_offline(vpn_id)
         await self._set_status(vpn_id, s, broadcast)
+
+        if lock == True:
+            L.release()
 
 
     """
@@ -640,6 +673,8 @@ class node():
     """
     called when we attempt to bring a VPN online but fail (Pending -> Failed), or
     when an online VPN fails (Online -> Failed)
+
+    failure doesn't stop the check-vpn task, which 
     """
     async def handle_local_failure(self, vpn_id : str, broadcast=True):
         await self._set_status(vpn_id, vpn_status_t.Failed, broadcast=broadcast)
