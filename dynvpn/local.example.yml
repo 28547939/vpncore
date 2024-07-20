@@ -35,7 +35,11 @@ local_vpn_dir: "/mnt/vpn"
 failed_status_timeout: 0
 
 
+# when bringing a VPN connection online, the delay in seconds to wait before 
+# checking whether it succeeded
 # 
+# generous settings for local_vpn_check_* probably make this unnecessary outside of a few seconds
+online_check_delay: 2
 
 # how many seconds to wait between attempts to reach a peer
 pull_interval: 30

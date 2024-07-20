@@ -16,6 +16,8 @@ local_defaults = {
     'local_vpn_check_timeout': 3,
     'local_vpn_check_retries': 1,
 
+    'online_check_delay': 2,
+
     'pull_interval': 30,
     'pull_timeout': 10,
 }
