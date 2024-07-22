@@ -16,7 +16,9 @@ import logging
 
 
 
-from dynvpn.common import vpn_status_t, site_status_t, vpn_t, site_t, str_to_vpn_status_t
+from dynvpn.common import  \
+    vpn_status_t, site_status_t, vpn_t, site_t, str_to_vpn_status_t, \
+    replica_mode_t, str_to_replica_mode_t
 import dynvpn.processor as processor
 from dynvpn import dynvpn_http
 
@@ -66,6 +68,8 @@ class node():
         self.tasks=[]
 
         self.processors=dict()
+
+        self.replica_mode=str_to_replica_mode_t(local_config['replica_mode'])
 
         self.http_client = dynvpn_http.client(self)
         self.http_server = dynvpn_http.server(self)
@@ -188,8 +192,15 @@ class node():
                 #await self._set_status(vpn_id, vs.Online, False)
                 await self.vpn_online(vpn_id, False, timeout_throw=False, lock=False)
             else:
-                self._logger.info(f'start(): {vpn_id}: peer is online, setting state to Replica and taking ours offline')
-                await self._set_status(vpn_id, vs.Replica, False)
+                resultstr=f'start(): {vpn_id}: peer is online, taking ours offline; '
+                if self.replica_mode == replica_mode_t.Auto:
+                    resultstr += f'status -> Replica (replica_mode=Auto)'
+                    await self._set_status(vpn_id, vs.Replica, False)
+                else:
+                    resultstr += f'status -> Offline (replica_mode={self.replica_mode})'
+                    await self._set_status(vpn_id, vs.Offline, False)
+
+                self._logger.info(resultstr)
 
                 # another node has already reported this VPN being online - need to set ours
                 # offline in case the underlying OpenVPN connection is online
@@ -225,19 +236,23 @@ class node():
                     self._logger.info(f'start(): {vpn_id}: peer is already online, stopping our connection')
                     await self._set_local_vpn_offline(vpn_id)
 
-                await self._set_status(vpn_id, vs.Replica, False)
+                if self.replica_mode == replica_mode_t.Auto:
+                    await self._set_status(vpn_id, vs.Replica, False)
+                else:
+                    await self._set_status(vpn_id, vs.Offline, False)
 
-        # any remaining local VPNs are set to Replica status
+        # any remaining local VPNs are set to Replica status (or Offline if replica_mode is not Auto)
         async for vpn_id in local_vpns():
             if self.get_local_vpn(vpn_id).status == vs.Offline:
-                await self._set_status(vpn_id, vs.Replica, False)
+                if self.replica_mode == replica_mode_t.Auto:
+                    await self._set_status(vpn_id, vs.Replica, False)
 
         await asyncio.sleep(1)
 
         for vpn in self.sites[self.site_id].vpn.values():
             vpn.lock.release()
-
         processor.peer_vpn_status_second.instance.activate()
+        processor.peer_vpn_status_second.instance.set_discard(False)
 
         for (site_id, _) in self.sites.items():
             if site_id != self.site_id:
@@ -405,6 +420,7 @@ class node():
 
         L=self.get_local_vpn(vpn_id).lock
         if lock == True:
+            # TODO separate lock wrapper class to more easily trace 
             self._logger.debug(f'vpn_online({vpn_id}): locking')
             await L.acquire()
 
@@ -491,6 +507,7 @@ class node():
 
         for t in self.tasks:
             if t.get_name() == f'check-vpn_{vpn_id}':
+                self._logger.debug(f'vpn_offline({vpn_id}): canceled check-vpn task {t.get_name()}')
                 t.cancel()
                 break
         else:
@@ -513,10 +530,11 @@ class node():
             if len(currently_online) == 0:
 
                 self._logger.error(f'vpn_offline({vpn_id}): from Replica, setting Online since no peers Online')
-                await self.vpn_online(vpn_id, broadcast)
-                return
+                await self.vpn_online(vpn_id, broadcast, lock=False)
 
-        await self._set_local_vpn_offline(vpn_id)
+        else:
+            await self._set_local_vpn_offline(vpn_id)
+
         await self._set_status(vpn_id, s, broadcast)
 
         if lock == True:
@@ -623,6 +641,7 @@ class node():
 
         state={
             'id': self.site_id,
+            'replica_mode': str(self.replica_mode),
             'state': {
                 s_id: site_state(s_id) for s_id, s in self.sites.items()
             }

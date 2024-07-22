@@ -20,6 +20,8 @@ local_defaults = {
 
     'pull_interval': 30,
     'pull_timeout': 10,
+
+    'replica_mode': 'Manual'
 }
 
 async def main():
