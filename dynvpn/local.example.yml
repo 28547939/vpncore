@@ -50,6 +50,14 @@ pull_timeout: 10
 # after it's marked Offline, subsequent pulls (checking for the site coming back online) will not retry
 pull_retries: 1
 
+# "replica mode" (could also be called "failover mode")
+#   controls whether our local VPN instances can enter the Replica state
+# can either be
+# Auto:     VPNs will enter Replica automatically 
+# Off:      VPNs will never be in Replica status- Offline instead; the set_replica HTTP call fails
+# Manual:   VPNs will never enter Replica automatically, but they can be set to Replica using set_replica
+replica_mode: "Manual"
+
 
 
 # connectivity checks for local VPN containers which are in the Online state

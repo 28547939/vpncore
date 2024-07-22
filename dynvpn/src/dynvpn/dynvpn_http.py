@@ -4,7 +4,10 @@ from aiohttp import web
 import json
 import asyncio
 
-from dynvpn.common import vpn_status_t, site_status_t, vpn_t, site_t, str_to_vpn_status_t
+from dynvpn.common import   \
+    vpn_status_t, site_status_t, vpn_t,  \
+    site_t, str_to_vpn_status_t, replica_mode_t, str_to_replica_mode_t
+
 import dynvpn.processor as processor
 
 class http_component():
@@ -194,8 +197,14 @@ class server(http_component):
     async def vpn_replica_handler(self, request, match):
         if 'id' in match:
             vpn_id=match['id']
-            await self.node.vpn_offline(vpn_id, True, vpn_status_t.Replica)
-            return {}
+            if self.node.replica_mode in [ replica_mode_t.Auto, replica_mode_t.Manual ]:
+                await self.node.vpn_offline(vpn_id, True, vpn_status_t.Replica)
+                return {}
+            else:
+                return { 'error': 
+                    f'refused: replica_mode is set to {self.node.replica_mode}, ' 
+                    +'but needs to be Auto or Manual'
+                }
         else:
             return { 'error': 'missing required key: id' }
 
@@ -219,15 +228,18 @@ class server(http_component):
                 #finfo['code_info']=
 
                 x['frames'].append( (c.co_filename, frame.f_lineno, c.co_qualname) )
-
         
         return ret
 
 
+    async def replica_mode_handler(self, request, match):
+        if 'value' in match:
+            try:
+                self.node.replica_mode=str_to_replica_mode_t(match['value'])
+                return {}
+            except Exception as e:
+                return { 'error': str(e) }
             
-
-
-
 
 
     # TODO API access / HTTP functionality in separate module as it expands
@@ -244,6 +256,7 @@ class server(http_component):
         router.add_post('/vpn/set_replica/{id}', self.vpn_replica_handler)
         router.add_get('/dump_state', self.dump_state_handler)
         router.add_get('/task_state', self.task_state_handler)
+        router.add_post('/set_replica_mode/{value}', self.replica_mode_handler)
 
         async def handler(request):
             match=await router.resolve(request)

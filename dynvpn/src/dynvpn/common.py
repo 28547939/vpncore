@@ -13,12 +13,35 @@ import json
 
 global_logger : logging.Logger
 
-class status(Enum):
-
+class enum_base(Enum):
     def __str__(self):
         return self.name
     def __json__(self):
         return json.dumps(self.name)
+
+class replica_mode_t(enum_base):
+    Auto = auto()
+    Manual = auto()
+    Disabled = auto()
+
+def str_to_replica_mode_t(s : str) -> replica_mode_t:
+
+    match s:
+        case 'Auto':
+            return replica_mode_t.Auto
+        case 'Manual':
+            return replica_mode_t.Manual
+        case 'Disabled':
+            return replica_mode_t.Disabled
+        case _:
+            raise Exception(
+                f'replica_mode config setting must be one of Auto, Manual, or Dislabed, '
+                + f'but was {s}'
+            )
+
+class status(enum_base):
+    pass
+
 
 # see README.md in this directory for information about these states and their transitions
 class vpn_status_t(status):
