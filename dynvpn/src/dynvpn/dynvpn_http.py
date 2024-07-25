@@ -216,8 +216,9 @@ class server(http_component):
     async def task_state_handler(self, request, match):
         ret={}
 
-        for t in self.node.tasks:
-            x=ret[t.get_name()]={
+        for tname in self.node.task_manager.list():
+            t=self.node.task_manager.find(tname)
+            x=ret[tname]={
                 'frames': []
             }
 
