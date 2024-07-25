@@ -21,6 +21,7 @@ from dynvpn.common import  \
     replica_mode_t, str_to_replica_mode_t
 import dynvpn.processor as processor
 from dynvpn import dynvpn_http
+from dynvpn.task_manager import task_manager
 
 def log(): 
     pass
@@ -65,7 +66,7 @@ class node():
 
         self.local_config = local_config
 
-        self.tasks=[]
+        self.task_manager=task_manager(self._logger)
 
         self.processors=dict()
 
@@ -74,14 +75,14 @@ class node():
         self.http_client = dynvpn_http.client(self)
         self.http_server = dynvpn_http.server(self)
 
-        self.tasks.append(asyncio.create_task(
+        self.task_manager.add(
             processor.peer_vpn_status_first(self).start(),
-            name='peer_vpn_status_first.start'
-        ))
-        self.tasks.append(asyncio.create_task(
+            'peer_vpn_status_first.start'
+        )
+        self.task_manager.add(
             processor.peer_vpn_status_second(self).start(),
-            name='peer_vpn_status_second.start'
-        ))
+            'peer_vpn_status_second.start'
+        )
 
         for (site_id, site_config) in sites_config.items():
             self.sites[site_id]=site_t.load(self, site_id, site_config, anycast_addr)
@@ -256,34 +257,9 @@ class node():
 
         for (site_id, _) in self.sites.items():
             if site_id != self.site_id:
-                self.tasks.append(
-                    asyncio.create_task(self.pull_state_task(site_id),
-                        name=f'{site_id}_pull-state'
-                    )
-                )
-       # TODO history of task processing 
-        while len(self.tasks) > 0:
-            try:
-                completed, _=await asyncio.wait(
-                    self.tasks, return_when=asyncio.FIRST_COMPLETED
-                )
-                for t in completed:
-                    tname=t.get_name()
-                    try:
-                        if e := t.exception():
-                            raise e
-                    except asyncio.CancelledError:
-                        self._logger.info(f'task {tname} was cancelled')
+                self.task_manager.add(self.pull_state_task(site_id), f'{site_id}_pull-state')
 
-                    try:
-                        self.tasks.remove(t)
-                        self._logger.info(f'task {tname} ended')
-                    except ValueError:
-                        self._logger.error('task ended but not present in self.tasks')
-                    
-            except Exception as e:
-                print(traceback.format_exc())
-
+        await self.task_manager.run()
     """
     TODO check whether we are appropriately stopping VPN check tasks
     """
@@ -318,20 +294,22 @@ class node():
 
                 if result == False:
                     self._logger.info(f'check_vpn_task({vpn_id}): failure detected, setting Failed status and exiting')
-                    await self.handle_local_failure(vpn_id)
+                    self.task_manager.add(
+                        self.handle_local_failure(vpn_id),
+                        f'handle_local_failure({vpn_id})'
+                    )
                     return
 
         name=f'check-vpn_{vpn_id}'
-        for x in self.tasks:
-
-            if isinstance(x, asyncio.Task) and x.get_name() == name:
-                self._logger.warning(f'start_check_vpn_task: task exists for {vpn_id}')
-                return
+        if self.task_manager.find(name) != None:
+            self._logger.warning(f'start_check_vpn_task: task exists for {vpn_id}')
+            return
 
 
         self._logger.debug(f'start_check_vpn_task: starting task for {vpn_id}')
-        self.tasks.append(
-            asyncio.create_task(f(vpn_id, iter), name=name)
+        self.task_manager.add(
+            f(vpn_id, iter), 
+            name
         )
 
 
@@ -505,11 +483,9 @@ class node():
             self._logger.debug(f'vpn_online({vpn_id}): locking')
             await L.acquire()
 
-        for t in self.tasks:
-            if t.get_name() == f'check-vpn_{vpn_id}':
-                self._logger.debug(f'vpn_offline({vpn_id}): canceled check-vpn task {t.get_name()}')
-                t.cancel()
-                break
+        if (t := self.task_manager.find(f'check-vpn_{vpn_id}')) is not None:
+            self._logger.debug(f'vpn_offline({vpn_id}): canceled check-vpn task {t.get_name()}')
+            t.cancel()
         else:
             if self.get_local_vpn(vpn_id).status == vs.Online:
                 self._logger.error(f'vpn_offline({vpn_id}): could not find check-vpn task')
@@ -532,10 +508,12 @@ class node():
                 self._logger.error(f'vpn_offline({vpn_id}): from Replica, setting Online since no peers Online')
                 await self.vpn_online(vpn_id, broadcast, lock=False)
 
+            else:
+                await self._set_status(vpn_id, s, broadcast)
+
         else:
             await self._set_local_vpn_offline(vpn_id)
-
-        await self._set_status(vpn_id, s, broadcast)
+            await self._set_status(vpn_id, s, broadcast)
 
         if lock == True:
             L.release()
