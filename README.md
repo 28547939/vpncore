@@ -36,6 +36,10 @@ to be production-ready.
 See `SETUP.md` for a configuration overview and an example of specific installation steps for 
 all three components (`vpndns`, `dynvpn`, and VPN jail/container setup).
 
+`dynvpn` demo
+
+[vpncore.webm](https://github.com/user-attachments/assets/222739db-e444-46e7-ae5f-dbdf2ba45612)
+
 
 #### Note on VPN containers
 
