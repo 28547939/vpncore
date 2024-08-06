@@ -6,7 +6,8 @@ import asyncio
 
 from dynvpn.common import   \
     vpn_status_t, site_status_t, vpn_t,  \
-    site_t, str_to_vpn_status_t, replica_mode_t, str_to_replica_mode_t
+    site_t, str_to_vpn_status_t, replica_mode_t, str_to_replica_mode_t, \
+    json_encoder
 
 import dynvpn.processor as processor
 
@@ -209,11 +210,10 @@ class server(http_component):
             return { 'error': 'missing required key: id' }
 
     # like pull_state but user-facing instead of peer-facing
-    async def dump_state_handler(self, request, match):
-        self.node._logger.debug(f'received dump_state from {request.remote}')
+    async def node_state_handler(self, request, match):
         return self.node._encode_state()
 
-    async def task_state_handler(self, request, match):
+    async def debug_state_handler(self, request, match):
         ret={}
 
         for tname in self.node.task_manager.list():
@@ -229,6 +229,18 @@ class server(http_component):
                 #finfo['code_info']=
 
                 x['frames'].append( (c.co_filename, frame.f_lineno, c.co_qualname) )
+
+            if len(fs) == 0:
+                x.update({
+                    #'coro': t.get_coro(),
+                    'done': t.done(),
+                    'cancelled': t.cancelled(),
+                    'cancelling': t.cancelling()
+                })
+
+        ret['locks']={}
+        for vpn_id, vpn in self.node.sites[self.node.site_id].vpn.items():
+            ret['locks'][vpn_id]=vpn.lock.get_status()
         
         return ret
 
@@ -255,8 +267,8 @@ class server(http_component):
         router.add_post('/vpn/set_online/{id}', self.vpn_online_handler)
         router.add_post('/vpn/set_offline/{id}', self.vpn_offline_handler)
         router.add_post('/vpn/set_replica/{id}', self.vpn_replica_handler)
-        router.add_get('/dump_state', self.dump_state_handler)
-        router.add_get('/task_state', self.task_state_handler)
+        router.add_get('/node_state', self.node_state_handler)
+        router.add_get('/debug_state', self.debug_state_handler)
         router.add_post('/set_replica_mode/{value}', self.replica_mode_handler)
 
         async def handler(request):
@@ -265,7 +277,7 @@ class server(http_component):
             if type(respdata) == str:
                 resptext=respdata
             else:
-                resptext=json.dumps(respdata, indent=4)
+                resptext=json.dumps(respdata, indent=4, cls=json_encoder)
 
             resptext += "\n"
 
