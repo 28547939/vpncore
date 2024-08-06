@@ -18,7 +18,9 @@ import logging
 
 from dynvpn.common import  \
     vpn_status_t, site_status_t, vpn_t, site_t, str_to_vpn_status_t, \
-    replica_mode_t, str_to_replica_mode_t
+    replica_mode_t, str_to_replica_mode_t, \
+    dynvpn_lock
+
 import dynvpn.processor as processor
 from dynvpn import dynvpn_http
 from dynvpn.task_manager import task_manager
@@ -98,12 +100,20 @@ class node():
         self.replica_priority=global_config['replica_priority']
 
 
+    async def start(self):
+
+        self.task_manager.add(
+            self._do_start(),
+            'start'
+        )
+
+        await self.task_manager.run()
         
 
     """
     Entry point to the instance after instantiation
     """
-    async def start(self):
+    async def _do_start(self):
         # make our state available to other peers and listen for push_state
         await self.http_server.start()
 
@@ -121,7 +131,7 @@ class node():
 
         # protect vpns from any operations (such as setting online, offline) while we initialize
         for vpn in self.sites[self.site_id].vpn.values():
-            await vpn.lock.acquire()
+            await vpn.lock.lock()
 
         # TODO potentially factor out these local functions
 
@@ -211,7 +221,11 @@ class node():
 
         # third pass to check any further VPNs detected online earlier, or others where we are first in the replica list
         async for vpn_id in local_vpns():
-            rp=self.replica_priority[vpn_id]
+            try:
+                rp=self.replica_priority[vpn_id]
+            except KeyError:
+                self._logger.warning(f'vpn {vpn_id} was present in local VPN list, but not in priority list - skipping')
+
             #if not ( (rp[0] == self.site_id and current_status == vs.Pending) or vpn_id in phase1_online ):
             if not self.get_local_vpn(vpn_id).status == vs.Pending:
                 continue
@@ -244,14 +258,17 @@ class node():
 
         # any remaining local VPNs are set to Replica status (or Offline if replica_mode is not Auto)
         async for vpn_id in local_vpns():
-            if self.get_local_vpn(vpn_id).status == vs.Offline:
-                if self.replica_mode == replica_mode_t.Auto:
+            if self.replica_mode == replica_mode_t.Auto:
+                if self.get_local_vpn(vpn_id).status == vs.Offline:
                     await self._set_status(vpn_id, vs.Replica, False)
+            else:
+                if self.get_local_vpn(vpn_id).status == vs.Pending:
+                    await self._set_status(vpn_id, vs.Offline, False)
 
         await asyncio.sleep(1)
 
         for vpn in self.sites[self.site_id].vpn.values():
-            vpn.lock.release()
+            vpn.lock.unlock()
         processor.peer_vpn_status_second.instance.activate()
         processor.peer_vpn_status_second.instance.set_discard(False)
 
@@ -259,10 +276,6 @@ class node():
             if site_id != self.site_id:
                 self.task_manager.add(self.pull_state_task(site_id), f'{site_id}_pull-state')
 
-        await self.task_manager.run()
-    """
-    TODO check whether we are appropriately stopping VPN check tasks
-    """
 
 
     async def pull_state_task(self, site_id):
@@ -393,6 +406,8 @@ class node():
     
     TODO - possibly encapsulate every major operation like this in a separate class with timeout and
     failure handling, and cleanup
+    -> may be necessary: right now, timeout_wrap is not aware of the locks used by vpn_online, which 
+        should be unlocked on timeout
     """
     async def vpn_online(self, vpn_id : str, broadcast : bool = True, timeout_throw=True, lock=True):
 
@@ -400,13 +415,13 @@ class node():
         if lock == True:
             # TODO separate lock wrapper class to more easily trace 
             self._logger.debug(f'vpn_online({vpn_id}): locking')
-            await L.acquire()
+            await L.lock()
 
 
         try:
             success=await self._vpn_online_impl(vpn_id, broadcast, timeout_throw=True)
-            if lock == True:
-                L.release()
+            if L.locked():
+                L.unlock()
             if success is False:
                 return False
             return True
@@ -414,8 +429,8 @@ class node():
             await self._set_local_vpn_offline(vpn_id, True)
             await self._set_status(vpn_id, vpn_status_t.Failed, broadcast)
 
-            if lock == True:
-                L.release()
+            if L.locked():
+                L.unlock()
 
             if timeout_throw is True:
                 raise
@@ -451,9 +466,12 @@ class node():
                 # False: don't remove the route
                 await self._set_local_vpn_offline(vpn_id, False)
 
-        if self.site_id not in self.replica_priority[vpn_id]:
-            self._logger.error('vpn_online({vpn_id}): this site is not present on the replica list')
-            return None
+        try:
+            if self.site_id not in self.replica_priority[vpn_id]:
+                self._logger.error(f'vpn_online({vpn_id}): this site is not present on the replica list')
+                return None
+        except KeyError:
+            self._logger.warning(f'vpn_online({vpn_id}): not present in priority list, aborting')
 
         await self._set_status(vpn_id, vs.Pending, broadcast)
         success=await self._set_local_vpn_online(vpn_id)
@@ -481,7 +499,7 @@ class node():
         L=self.get_local_vpn(vpn_id).lock
         if lock == True:
             self._logger.debug(f'vpn_online({vpn_id}): locking')
-            await L.acquire()
+            await L.lock()
 
         if (t := self.task_manager.find(f'check-vpn_{vpn_id}')) is not None:
             self._logger.debug(f'vpn_offline({vpn_id}): canceled check-vpn task {t.get_name()}')
@@ -489,8 +507,6 @@ class node():
         else:
             if self.get_local_vpn(vpn_id).status == vs.Online:
                 self._logger.error(f'vpn_offline({vpn_id}): could not find check-vpn task')
-
-
 
         self._logger.info(f'vpn_offline({vpn_id}): setting status to {s}')
 
@@ -516,7 +532,7 @@ class node():
             await self._set_status(vpn_id, s, broadcast)
 
         if lock == True:
-            L.release()
+            L.unlock()
 
 
     """
@@ -841,6 +857,6 @@ class node():
             return True
 
         else:
-            self._logger.error('_set_local_vpn_online({vpn_id}): connectivity check failed, returning False')
+            self._logger.error(f'_set_local_vpn_online({vpn_id}): connectivity check failed, returning False')
             return False
 

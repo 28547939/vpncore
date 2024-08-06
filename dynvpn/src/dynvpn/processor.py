@@ -126,9 +126,10 @@ class peer_vpn_status_second(processor):
 
                     # TODO  d is none when there are no other online sites
 
-                    if d == 1 or len(rp) == 0:
-                        await self.node.vpn_online(vpn_id)
-                        return
+                    if self.node._local_vpn_obj(vpn_id).status == vpn_status_t.Replica:
+                        if d == 1 or len(rp) == 0:
+                            await self.node.vpn_online(vpn_id)
+                            return
                 else:
                     self.logger.info(f'peer_vpn_status_second({vpn_id}@{site_id}): peer status Offline: local site not configured as Replica (skipping) (rp={rp})')
 

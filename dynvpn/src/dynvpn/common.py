@@ -13,6 +13,10 @@ import json
 
 global_logger : logging.Logger
 
+class json_encoder(json.JSONEncoder):
+    def default(self, x):
+        return str(x)
+
 class enum_base(Enum):
     def __str__(self):
         return self.name
@@ -66,6 +70,68 @@ class site_status_t(status):
     #
     Admin_offline = auto()
 
+
+class lock_status_t(enum_base):
+    Locked = auto()
+    Unlocked = auto()
+
+class dynvpn_lock():
+    def __init__(self, trace=False, name=None) -> None:
+        self._lock=asyncio.Lock()
+        self.locked_task : Optional[str]=None
+        self._trace=trace
+        self._name=name
+        self._logger=logging.getLogger('dynvpn')
+
+    def _logtrace(self, method, str):
+        self._logger.debug(f'dynvpn_lock[name={self._name}]: {method}: {str}')
+
+
+    async def lock(self):
+        if self._lock.locked() and self.locked_task == (tname := asyncio.current_task().get_name()):
+            if self._trace:
+                self._logtrace('lock', f'task {tname} already has the lock')
+            return
+        else:
+            if self._trace:
+                self._logtrace('lock', f'task {asyncio.current_task().get_name()} waiting')
+            await self._lock.acquire()
+            if self._trace:
+                self._logtrace('lock', f'task {asyncio.current_task().get_name()} acquired')
+            self.locked_task = asyncio.current_task().get_name()
+
+    def unlock(self):
+        if self._lock.locked():
+            tname=asyncio.current_task().get_name()
+            if self.locked_task != tname:
+                raise Exception(
+                    f'dynvpn_lock.unlock: current task {tname} cannot '
+                    + f'unlock lock, locked by {self.locked_task}'
+                )
+            else:
+                if self._trace:
+                    self._logtrace('lock', f'task {tname} unlocked')
+
+                self.locked_task=None
+                self._lock.release()
+
+    def locked(self):
+        return self._lock.locked()
+
+    def get_status(self):
+        
+        if self._lock.locked():
+            return {
+                'status': lock_status_t.Locked,
+                'task': self.locked_task,
+            }
+        else:
+            return {
+                'status': lock_status_t.Unlocked,
+                'task': self.locked_task,
+            }
+
+
 # represents a VPN container on a specific host
 @dataclass()
 class vpn_t():
@@ -78,12 +144,10 @@ class vpn_t():
     status : vpn_status_t
 
     # only relevant for local VPNs
-    lock : asyncio.Lock
+    lock : dynvpn_lock
 
     def set_status(self, s : vpn_status_t):
         self.status=s
-
-
 
 
 @dataclass()
@@ -153,7 +217,7 @@ class site_t():
                 status=vpn_status_t.Pending,
                 local_addr=ip_address(local_addr),
                 anycast_addr=ip_address(anycast_addr),
-                lock=asyncio.Lock()
+                lock=dynvpn_lock(trace=True, name=vpn_id)
             )
 
             vpns[vpn_id]=vpn_obj
@@ -178,4 +242,3 @@ class site_t():
             pull_retries=pull_retries,
             status=site_status_t.Pending
         )
-
