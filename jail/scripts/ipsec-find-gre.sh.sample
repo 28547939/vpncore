@@ -1,0 +1,13 @@
+#!/bin/sh
+
+set -o nounset
+
+# this script is used in ipsec jails to detect a GRE tunnel's remote address, which is intended to be 
+# automatically generated and provided in JSON (see load-gre)
+
+GRECONFIG=/root/$(hostname).json
+
+find_gre () {
+    cat $GRECONFIG | \
+        jq -er '[ .[] | [ .inet[1], .tunnel[1] ] ] | map(select(.[1] == "'"$1"'")) | .[0][0]'
+}

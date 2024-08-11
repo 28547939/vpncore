@@ -13,8 +13,8 @@ mount -t nullfs $BASE $VPN_DIR
 # (such as ipfw rule script when executed by the openvpn process)
 export STATE_DIR=$BASE/state/$NAME
 mkdir -p $STATE_DIR
-echo $EPAIR > $STATE_DIR/epair-local
-echo $EPAIR_ANYCAST > $STATE_DIR/epair-anycast
+#echo $EPAIR > $STATE_DIR/epair-local
+#echo $EPAIR_ANYCAST > $STATE_DIR/epair-anycast
 
 export jexec="/usr/sbin/jexec $NAME"
 
@@ -35,8 +35,8 @@ $jexec sh /etc/extvpn-ipfw.sh
 sh $VPN_DIR/scripts/add-routes.sh $NAME $LOCAL_GATEWAY $VPN_DIR/etc/openvpn
 
 # optionally, load GRE from JSON (see load-gre.sh.sample)
-if [ -f $BASE/etc/gre/$NAME.json ] && [ -x $BASE/scripts/load-gre.sh ] ; then
-    $jexec $LOCAL_VPN_DIR/scripts/load-gre.sh $LOCAL_VPN_DIR/etc/gre/$NAME.json
+if [ -f $BASE/etc/gre/gre.json ] && [ -x $BASE/scripts/load-gre.sh ] ; then
+    $jexec $LOCAL_VPN_DIR/scripts/load-gre.sh $LOCAL_VPN_DIR/etc/gre/gre.json
 fi
 
 #TUN=tun${VPN_ID}
@@ -44,7 +44,8 @@ fi
 
 # 2024-03-27: workaround for tun allocation issue - let the system choose the ID number
 TUN=$($jexec ifconfig tun create)
-echo $TUN > $STATE_DIR/tun
+# no longer using state dir for this; prefer to detect the tun device name automatically inside the jail
+#echo $TUN > $STATE_DIR/tun
 
 $jexec chown root:openvpn /dev/$TUN
 $jexec chmod 660 /dev/$TUN

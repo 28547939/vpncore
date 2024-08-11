@@ -18,15 +18,20 @@ if [ ! -z $dev ] && [ ! -z $route_vpn_gateway ] && [ ! -z $ifconfig_local ]; the
 	VPN_SESSION=1
 fi
 
-jladdr="table(def-jladdr)"
+jladdr_local="table(def-jladdr-local)"
+jladdr_anycast="table(def-jladdr-anycast)"
 TUN=$dev
-vpndns="table(def-vpndns)"
+vpndns_local="table(def-vpndns-local)"
+vpndns_anycast="table(def-vpndns-anycast)"
 
-epair_local=$(cat $LOCAL_VPN_DIR/state/$NAME/epair-local)b
-epair_anycast=$(cat $LOCAL_VPN_DIR/state/$NAME/epair-anycast)b
+#epair_local=$(cat $LOCAL_VPN_DIR/state/$NAME/epair-local)b
+#epair_anycast=$(cat $LOCAL_VPN_DIR/state/$NAME/epair-anycast)b
 
+epair_local="table(def-epair-local)"
+epair_anycast="table(def-epair-anycast)"
 
-ipfw table intnet add 10.15.12.2
+# GRE present in every VPN container
+ipfw table intnet add 10.15.12.0/30
 ipfw table intnet add 10.10.12.0/30
 
 if [ $VPN_SESSION ]; then
@@ -49,7 +54,7 @@ ipfw nat 5 config if $epair_anycast log
 $add    20      allow ip from 127.0.0.0/8 to 127.0.0.0/8 via lo0
 
 # connectivity check
-$add	21 		allow icmp from $ifconfig_local to 1.1.1.1, 8.8.8.8 out xmit $TUN keep-state
+$add	21 		allow icmp from $ifconfig_local to 1.1.1.1,8.8.8.8 out xmit $TUN keep-state
 
 $add    25  	deny gre from any to any in recv $TUN
 
@@ -65,8 +70,8 @@ if [ $VPN_SESSION ]; then
 	$add	84 		nat 3 udp from $route_vpn_gateway 53 to 'table(priv-dns)' out xmit $epair_anycast
 fi
 
-$add    85      nat 4 udp from 'table(intnet)' to $vpndns 53 keep-state 
-$add    86      nat 5 udp from 'table(intnet)' to $vpndns 53 keep-state 
+$add    85      nat 4 udp from 'table(intnet)' to $vpndns_local 53 keep-state 
+$add    86      nat 5 udp from 'table(intnet)' to $vpndns_anycast 53 keep-state 
 $add    87      nat 4 udp from 'table(priv-dns)' 53 to $jladdr in recv $epair_local
 $add    88      nat 5 udp from 'table(priv-dns)' 53 to $jladdr in recv $epair_anycast
 

@@ -1,25 +1,35 @@
 #!/bin/sh
 
-set -o nounset
-#set -x
 
+set -o nounset
+
+# GRE config file path
 FILE=$1
+# top-level key in the config file
+KEY=$2
 
 # load a JSON GRE config file (BSD)
 # the JSON config to load specifies the parameters of a specific GRE interface
 # /30 prefix is assumed
+# 
+# the top level keys are the vpn container names (dynvpn${i})
 #
 # example:
 # {
-#   "gre0": {
-#       "inet": [ "10.0.0.1", "10.0.0.2" ],
-#       "tunnel": [ "192.168.1.1", "192.168.1.2" ]
+#   "dynvpn0": {
+#       "gre0": {
+#           "inet": [ "10.0.0.1", "10.0.0.2" ],
+#           "tunnel": [ "192.168.1.50", "192.168.1.2" ]
+#       }
 #   }
 # }
+# 
+# the intention is that these GRE config files are automatically generated 
+# (currently outside the scope of this repository)
 
 
 jq_value () {
-    cat $FILE | jq -er "$@ // empty"
+    cat $FILE | jq ".$KEY" | jq -er "$@ // empty"
 }
 
 export IFS=$'\t'
@@ -49,9 +59,11 @@ for iface in $(jq_value 'keys | @tsv'); do
         for route in $routes ; do 
             route delete $route #2>/dev/null
             route add $route $inet2
+            ipfw table intnet add $route
         done
     fi
 
     ipfw table allow-gre add $iface
+    ipfw table intnet add ${inet1}/30
 done
 

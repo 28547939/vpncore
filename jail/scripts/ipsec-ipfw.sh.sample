@@ -5,15 +5,16 @@ ipfw -f flush
 add="ipfw add"
 set -x
 
-export GRECONFIG=/root/$(hostname).json
 
+# hard-code the $GRECONFIG path based on `hostname` in find-gre and load-gre
 . /root/find-gre.sh
-/root/load-gre.sh $GRECONFIG
+/root/load-gre.sh 
 
 # for now, unused
 ipfw table allow-gre create
 
 
+# ipsec jail passes remote end of GRE tunnel to `fwd` (see load-gre)
 #$add    50      fwd $(find_gre 10.0.254.63) ip from 192.168.18.104/29 to not 192.168.0.0/16
 #$add    51      fwd $(find_gre 10.0.254.63) udp from 192.168.18.104/29 to any 53
 
