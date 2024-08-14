@@ -826,7 +826,8 @@ class node():
             v.id,
             str(v.local_addr),
             self.local_config["local_vpn_dir"],
-            self.site_id
+            self.site_id,
+            str(self.sites[self.site_id].gateway_addr)
         )
 
         if ret != 0:

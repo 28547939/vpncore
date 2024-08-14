@@ -8,6 +8,7 @@ export NAME=$1
 export LOCAL_ADDR=$2
 export LOCAL_VPN_DIR=$3
 export SITE_ID=$4
+export LOCAL_GATEWAY=$5
 
 
 SSH="ssh    \
@@ -26,6 +27,7 @@ $SSH    \
         --log $LOCAL_VPN_DIR/log/openvpn-$NAME.log \
         --setenv LOCAL_VPN_DIR $LOCAL_VPN_DIR \
         --setenv NAME $NAME \
+        --setenv LOCAL_GATEWAY $LOCAL_GATEWAY \
         --script-security 2 --config /home/openvpn/openvpn.conf \
         --ifconfig-noexec \
         --writepid $LOCAL_VPN_DIR/pid/openvpn-$NAME.pid
