@@ -209,6 +209,7 @@ class server(http_component):
         else:
             return { 'error': 'missing required key: id' }
 
+
     # like pull_state but user-facing instead of peer-facing
     async def node_state_handler(self, request, match):
         return self.node._encode_state()

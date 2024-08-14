@@ -330,6 +330,7 @@ class node():
         try:
             return self.sites[self.site_id].vpn[vpn_id]
         except KeyError:
+            self._logger.warning(f'get_local_vpn: KeyError: {vpn_id} ; keys={self.sites[self.site_id].vpn.keys()}')
             return None
 
     """
@@ -413,7 +414,6 @@ class node():
 
         L=self.get_local_vpn(vpn_id).lock
         if lock == True:
-            # TODO separate lock wrapper class to more easily trace 
             self._logger.debug(f'vpn_online({vpn_id}): locking')
             await L.lock()
 
@@ -617,7 +617,6 @@ class node():
     # convert state to JSON
     # used for transmission of our state to a peer, or for dumping state on all peers to a client
     # if site_id is None, include all sites
-    #def _encode_state(self, site_id=None):
     def _encode_state(self, site_id=None):
         def site_state(site_id):
             return dict({
@@ -711,6 +710,8 @@ class node():
                     # eventually clear our Failed status, since underlying conditions may have changed
                     await asyncio.sleep(timeout)
 
+                    # TODO change check here; right now setting offline right after we set online
+                    # TODO also cancel t his task when we set online or offline
                     for _, site in self.sites.items():
                         if site.vpn[vpn_id].status == vpn_status_t.Online:
                             await self._set_status(vpn_id, vpn_status_t.Offline)
