@@ -602,6 +602,7 @@ class node():
             lambda site_id: 
                 self.sites[site_id].status == site_status_t.Online and \
                 site_id in self.replica_priority[vpn_id] and \
+                self.sites[site_id].vpn[vpn_id].status == vpn_status_t.Replica and \
                 cond(site_id),
             self.replica_priority[vpn_id]
         ))
