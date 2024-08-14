@@ -31,7 +31,7 @@ async def main():
         description='',
     )
 
-    prs.add_argument('--site-id', required=True)
+    #prs.add_argument('--site-id', required=True)
     prs.add_argument('--local-config', required=True, default='local.yml')
     prs.add_argument('--global-config', required=True, default='global.yml')
     args=vars(prs.parse_args())
@@ -57,7 +57,7 @@ async def main():
         if k not in local_config:
             local_config[k]=default
 
-    instance = node(args['site_id'], local_config, global_config, logger)
+    instance = node(local_config['site_id'], local_config, global_config, logger)
     try:
         await instance.start()
     except KeyboardInterrupt:
