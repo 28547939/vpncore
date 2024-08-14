@@ -6,7 +6,8 @@ import traceback
 from collections import deque
 
 
-from dynvpn.common import vpn_status_t, site_status_t, vpn_t, site_t, str_to_vpn_status_t
+from dynvpn.common import vpn_status_t, site_status_t, vpn_t, site_t, str_to_vpn_status_t, \
+    replica_mode_t
 
 """
 when we have a method which accepts a stream of incoming events, it may sometimes be useful 
@@ -114,6 +115,9 @@ class peer_vpn_status_second(processor):
                 # in the list and we are first
                 if self.node.site_id in rp:
 
+                    # TODO overall design for replica distance and replica priority to be updated based on 
+                    # observed behavior
+
                     # among other things, _replica_distance will check that we are in Replica state
                     rd=self.node._replica_distance(site_id, self.node.site_id, vpn_id)
                     self.logger.info(f'peer_vpn_status_second({vpn_id}@{site_id}): peer status Offline: rd={rd}')
@@ -123,8 +127,6 @@ class peer_vpn_status_second(processor):
                     #condition=\
                     #    d == 1 or \
                     #    (self.node.replica_priority[vpn_id][0] == self.node.site_id and self.node.replica_priority[vpn_id][-1] == site_id)
-
-                    # TODO  d is none when there are no other online sites
 
                     if self.node._local_vpn_obj(vpn_id).status == vpn_status_t.Replica:
                         if d == 1 or len(rp) == 0:
@@ -142,15 +144,18 @@ class peer_vpn_status_second(processor):
                 #    self.logger.info(f'peer_vpn_status_second({vpn_id}@{site_id}): replica_priority={self.node.replica_priority[vpn_id]}')
                 #    return
 
-                # currently, transition to Replica regardless of whether we are higher in the replica list
-                # this enables us to also manually bring a VPN to the Online state elsewhere
-
-                # Pending -> Replica
-                # Online -> Replica
-                if self.node.get_local_vpn(vpn_id).status in \
+                # Pending -> Replica (or Offline)
+                # Online -> Replica (or Offline)
+                if (vpn := self.node.get_local_vpn(vpn_id)) is not None and vpn.status in \
                     [ vs.Pending, vs.Online ]:
 
-                    await self.node.vpn_offline(vpn_id, True, vs.Replica)
+                    if self.node.replica_mode != replica_mode_t.Disabled:
+                        # currently, transition to Replica regardless of whether we are higher in the replica list
+                        # this enables us to also manually bring a VPN to the Online state elsewhere
+
+                        await self.node.vpn_offline(vpn_id, True, vs.Replica)
+                    else:
+                        await self.node.vpn_offline(vpn_id, True, vs.Offline)
                 else:
                     return
 
@@ -163,7 +168,7 @@ class peer_vpn_status_second(processor):
                 pass
 
             # illegal transitions
-            case (vs.Replica, vs.Failed):
+            case (vs.Replica, vs.Failed) | (vs.Offline, vs.Failed):
                 self.logger.warning(f'peer_vpn_status_second({vpn_id}@{site_id}): illegal transition or missed a transition')
 
             case _:
