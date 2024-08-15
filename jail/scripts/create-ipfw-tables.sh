@@ -7,20 +7,28 @@
 VPN_ID=$1
 NAME=$2
 
-ipfw table def-epair create type iface
-ipfw table def-epair add ${EPAIR}b
-ipfw table def-epair add ${EPAIR_ANYCAST}b
+ipfw table def-epair-local create type iface
+ipfw table def-epair-local add ${EPAIR}b
+ipfw table def-epair-anycast create type iface
+ipfw table def-epair-anycast add ${EPAIR_ANYCAST}b
 
 
-ipfw table def-vpndns create 
-ipfw table def-vpndns add "${LOCAL_NET}.3"
-ipfw table def-vpndns add "${ANYCAST_NET}.3"
+vpndns_local="${LOCAL_NET}.3"
+vpndns_anycast="${ANYCAST_NET}.3"
+ipfw table def-vpndns-local create 
+ipfw table def-vpndns-local add $vpndns_local
+ipfw table def-vpndns-anycast create 
+ipfw table def-vpndns-anycast add $vpndns_anycast
 
 # addresses on our epair interfaces
-ipfw table def-jladdr create
-ipfw table def-jladdr add $JAIL_LOCAL_ADDR
-ipfw table def-jladdr add $JAIL_ANYCAST_ADDR
+ipfw table def-jladdr-local create
+ipfw table def-jladdr-local add $JAIL_LOCAL_ADDR
+ipfw table def-jladdr-anycast create
+ipfw table def-jladdr-anycast add $JAIL_ANYCAST_ADDR
 
+# intnet table must contain these entries at least, and must contain
+# any addresses/prefixes for any clients that intend to access 
+# DNS and/or internet via GRE
 ipfw table intnet create
 ipfw table intnet add $JAIL_LOCAL_ADDR
 ipfw table intnet add $JAIL_ANYCAST_ADDR
@@ -29,9 +37,8 @@ ipfw table intnet add $JAIL_ANYCAST_ADDR
 # to the jail address
 # it needs to at least include the vpndns instances
 ipfw table priv-dns create
-ipfw table def-vpndns list | while read addr x; do
-    ipfw table priv-dns add $addr
-done
+ipfw table priv-dns add $vpndns_local
+ipfw table priv-dns add $vpndns_anycast
 
 
 # some clients will attempt to resolve independently of system-wide configuration, especially

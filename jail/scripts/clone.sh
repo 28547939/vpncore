@@ -3,6 +3,7 @@
 # should be run from start-jail.sh
 # 
 # requires DYN_BASE variable (set in common.sh) 
+# requires ZFS_BASE variable (set in vars.sh per-host) 
 # requires $NAME argument
 
 set -o nounset
