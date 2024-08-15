@@ -36,7 +36,7 @@ sh $VPN_DIR/scripts/add-routes.sh $NAME $LOCAL_GATEWAY $VPN_DIR/etc/openvpn
 
 # optionally, load GRE from JSON (see load-gre.sh.sample)
 if [ -f $BASE/etc/gre/gre.json ] && [ -x $BASE/scripts/load-gre.sh ] ; then
-    $jexec $LOCAL_VPN_DIR/scripts/load-gre.sh $LOCAL_VPN_DIR/etc/gre/gre.json
+    $jexec $LOCAL_VPN_DIR/scripts/load-gre.sh $LOCAL_VPN_DIR/etc/gre/gre.json $NAME
 fi
 
 #TUN=tun${VPN_ID}
