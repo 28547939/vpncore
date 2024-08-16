@@ -11,7 +11,7 @@ ssh="ssh -i ~/.ssh/id.openvpn -o StrictHostKeyChecking=off openvpn@$LOCAL_ADDR"
 
 $ssh killall openvpn
 
-PIDFILE=$LOCAL_VPN_DIR/state/openvpn-$NAME.pid 
+PIDFILE=$LOCAL_VPN_DIR/pid/openvpn-$NAME.pid 
 $ssh wait $(cat $PIDFILE)
 
 rm -f $PIDFILE
