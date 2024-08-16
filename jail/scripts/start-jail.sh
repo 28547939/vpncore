@@ -24,10 +24,10 @@ export VPN_DIR=${JAIL_ROOT}${LOCAL_VPN_DIR}
 
 echo jail name is $NAME
 
-# install relevant files that we have here into the base before cloning
-sh $BASE/scripts/update-files.sh $NAME
-
-sh $BASE/scripts/clone.sh $NAME
+if ! sh $BASE/scripts/clone.sh $NAME; then
+    echo cloning failed
+    exit 1
+fi
 
 export IF_ID=$(vpn_ifid $VPN_ID)
 export IF_ID_Anycast=$(vpn_anycast_ifid $VPN_ID)
