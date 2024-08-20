@@ -1,13 +1,36 @@
 
-# static configuration which is present on all nodes
+# static configuration which is used by all nodes
+# it must be identical on all nodes
 
+
+# numeric vs "dynvpn" IDs
+# all VPNs are named "dynvpnN" where N is some numeric ID greater than 0
+# so the numeric ID uniquely identifies the VPN, but we still use the "dynvpn" prefix
+#   for clarity/readability and for situations where a non-numeric ID is needed 
+#   (like jail names)
+
+
+# to configure a VPN for failover, list it here with its priority list of site IDs
+# VPNs which are not listed here will not participate in any failover logic (see README)
+#
+# but, note that it's not possible to bring the same VPN online on two hosts: an Online VPN will
+#   switch to Offline if it learns of another host bringing that VPN to Online
 replica_priority:
     vpn1:
         - host1
         - host2
 
-anycast_addr:
-    vpn1: '10.0.254.101'
+# in addition to the assumption that all VPN names begin with "dynvpn", we assume that
+# a VPN's numeric ID corresponds to its (container's) IP addresses.
+#
+# all VPNs have an anycast address and a local address, and these are calculated from a "base"
+#   IP address value by just adding the numeric ID to the base.
+# in the future, if it proves useful, this constraint can be eliminated, potentially at the expense
+#   of a more verbose configuration
+#
+# in this example, dynvpn0 will have address 10.0.0.50, dynvpn1 will have 10.0.0.51, and so on
+# currently the arithmetic will "wrap around", so 10.0.0.50 for vpn ID 56 is 10.0.2.0
+vpn_anycast_addr_base: "10.0.0.50"
 
 sites:
     host1:
@@ -16,16 +39,22 @@ sites:
         peer_port: 5000
         gateway_addr: '192.168.1.1'
 
-        # VPNs which are present on this host
+        # the "base" address needs to be specified for each site, with addresses calculated as above
+        vpn_local_addr_base: '192.168.1.50'
+
+        # for a VPN to be usable on a node, it must be listed here (using its numeric ID, for convenience)
         vpn:
-            vpn1: '192.168.1.101'
-            
+            - 0
 
 
     host2:
         peer_addr: "192.168.2.254"
         peer_port: 5000
         gateway_addr: '192.168.2.1'
+
+        vpn_local_addr_base: '192.168.2.50'
+
         vpn:
-            vpn1: '192.168.2.101'
+            - 0
+            - 1
             

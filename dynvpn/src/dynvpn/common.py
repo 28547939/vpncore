@@ -75,6 +75,15 @@ class lock_status_t(enum_base):
     Locked = auto()
     Unlocked = auto()
 
+
+# TODO
+class dynvpn_exception(Exception):
+    pass
+
+"""
+TODO contextmanager with optional lock to match what we see in node.vpn_*
+    currently can't use asyncio contextmanager without checking lock argument first
+"""
 class dynvpn_lock():
     def __init__(self, trace=False, name=None) -> None:
         self._lock=asyncio.Lock()
@@ -135,19 +144,32 @@ class dynvpn_lock():
 # represents a VPN container on a specific host
 @dataclass()
 class vpn_t():
-    id : str
+
+    # the numeric ID remains abstract from the standpoint of the dynvpn instance
+    # however, it's also true that currently, all VPN containers are named "dynvpn<id>",
+    #   where <id> is its unique numeric ID.
+    # we do not need the numeric ID in this program.
+    name : str
     site_id : str
 
-    local_addr : Optional[IPv4Address]
+    local_addr : IPv4Address
     anycast_addr : IPv4Address
 
-    status : vpn_status_t
-
     # only relevant for local VPNs
-    lock : dynvpn_lock
+    lock : Optional[dynvpn_lock]
+
+    # a VPN should always be initialized to Pending status
+    status : vpn_status_t = vpn_status_t.Pending
 
     def set_status(self, s : vpn_status_t):
         self.status=s
+
+    @staticmethod
+    def vname(vpn_id : int) -> str:
+        if isinstance(vpn_id, int):
+            return 'dynvpn%d' % vpn_id
+        else:
+            raise TypeError(f'vname was passed "{vpn_id}" but requires an argument of type int')
 
 
 @dataclass()
@@ -197,30 +219,32 @@ class site_t():
     # local_vpn_config is the `vpn` key in the local.yml config
     # site_config is the site's entry from the `sites` key in the global.yml config
     @staticmethod
-    def load(node, site_id, site_config, anycast_addr_map):
+    def load(node, site_id, site_config, global_config):
         # separate map for VPNs for each peer, even though each vpn object is initialized to be identical
         vpns={}
 
-        for vpn_id, local_addr in site_config['vpn'].items():
+        for vpn_id in site_config['vpn']:
+            vname=vpn_t.vname(int(vpn_id))
 
-            if vpn_id not in anycast_addr_map:
-                node._logger.info(f"skipping VPN {vpn_id} on {site_id}: "+
-                    "does not have an entry under anycast_addr in the global config")
-                continue
+            # the ipaddress library already includes support for this operation
+            # TODO catch invalid value / exception
+            anycast_addr=ip_address(global_config['vpn_anycast_addr_base']) + vpn_id
+            local_addr=ip_address(site_config['vpn_local_addr_base']) + vpn_id
 
-
-            anycast_addr=anycast_addr_map[vpn_id]
+            if site_id == node.site_id:
+                L=dynvpn_lock(trace=True, name=vname)
+            else:
+                L=None
 
             vpn_obj=vpn_t(
-                id=vpn_id,
+                name=vname,
                 site_id=site_id,
-                status=vpn_status_t.Pending,
                 local_addr=ip_address(local_addr),
                 anycast_addr=ip_address(anycast_addr),
-                lock=dynvpn_lock(trace=True, name=vpn_id)
+                lock=L
             )
 
-            vpns[vpn_id]=vpn_obj
+            vpns[vname]=vpn_obj
 
         if site_id != node.local_config['site_id']:
             pull_interval = datetime.timedelta(seconds=node.local_config['pull_interval'])

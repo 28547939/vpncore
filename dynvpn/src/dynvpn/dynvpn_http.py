@@ -7,9 +7,23 @@ import asyncio
 from dynvpn.common import   \
     vpn_status_t, site_status_t, vpn_t,  \
     site_t, str_to_vpn_status_t, replica_mode_t, str_to_replica_mode_t, \
-    json_encoder
+    json_encoder, dynvpn_exception
 
 import dynvpn.processor as processor
+
+
+"""
+TODO
+"""
+class http_response():
+    pass
+
+class http_error(http_response):
+    pass
+
+class http_ok(http_response):
+    pass
+
 
 class http_component():
     def __init__(self, node):
@@ -89,6 +103,15 @@ class client(http_component):
 
         await do_pull()
 
+"""
+TODO - pass through structured return values from underlying interface in node.py to here
+refactor request handling/response
+
+Ok -> empty response with optional message
+Error -> { "error": "msg" }
+
+possibly use exceptions in node.py
+"""
 class server(http_component):
 
     async def pull_handler(self, request, match):
@@ -199,8 +222,13 @@ class server(http_component):
         if 'id' in match:
             vpn_id=match['id']
             if self.node.replica_mode in [ replica_mode_t.Auto, replica_mode_t.Manual ]:
-                await self.node.vpn_offline(vpn_id, True, vpn_status_t.Replica)
-                return {}
+                try:
+                    await self.node.vpn_replica(vpn_id, True)
+                    return {}
+                except dynvpn_exception as e:
+                    return {
+                        'error': str(e)
+                    }
             else:
                 return { 'error': 
                     f'refused: replica_mode is set to {self.node.replica_mode}, ' 
@@ -208,7 +236,6 @@ class server(http_component):
                 }
         else:
             return { 'error': 'missing required key: id' }
-
 
     # like pull_state but user-facing instead of peer-facing
     async def node_state_handler(self, request, match):
@@ -256,7 +283,6 @@ class server(http_component):
             
 
 
-    # TODO API access / HTTP functionality in separate module as it expands
     async def start(self):
             
         # TODO properly handle 404

@@ -75,5 +75,5 @@ local_vpn_check_retries: 3
 # timeout for asynchronous activity in general that isn't specified otherwise
 # for example, activating/deactivating a VPN connection; any other internal 
 #   async part of the program which has any chance of blocking indefinitely
-default_timeout: 30
+default_timeout: 60
 
