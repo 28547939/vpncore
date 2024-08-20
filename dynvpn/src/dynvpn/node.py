@@ -193,10 +193,11 @@ class node():
 
         # third pass to check any further VPNs detected online earlier, or others where we are first in the replica list
         async def phase3(vname):
-            try:
+            if vname in self.replica_priority:
                 rp=self.replica_priority[vname]
-            except KeyError:
-                self._logger.warning(f'vpn {vname} was present in local VPN list, but not in priority list - skipping')
+            else:
+                self._logger.warning(f'vpn {vname} was present in local VPN list, but not in priority list')
+                rp=None
 
             #if not ( (rp[0] == self.site_id and current_status == vs.Pending) or vname in phase1_online ):
             if not self.get_local_vpn(vname).status == vs.Pending:
@@ -205,7 +206,7 @@ class node():
             # if we're the highest priority, only bring the VPN online at startup if it's not online elsewhere
             if len(currently_online(vname)) == 0:
 
-                if self.site_id == rp[0]:
+                if rp is not None and self.site_id == rp[0]:
                     self._logger.info(f'start: {vname}: local VPN is first in priority list, with no peers in Online state - setting online (list={rp})')
 
                     # Second argument False: do not push this state to peers, to avoid noise during startup
