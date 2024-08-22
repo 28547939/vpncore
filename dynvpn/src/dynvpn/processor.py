@@ -77,39 +77,46 @@ class peer_vpn_status_first(processor):
     """
     handle items that were received by handle_peer_state
     """
-    async def handler(self, site_id : str, vpn_id : str, status : vpn_status_t):
+    async def handler(self, site_id : str, vname : str, status : vpn_status_t):
 
 
-        if vpn_id not in self.node.sites[site_id].vpn:
-            self.logger.warning(f'peer_vpn_status_first: vpn {vpn_id} not configured for site {site_id}')
+        if vname not in self.node.sites[site_id].vpn:
+            self.logger.warning(f'peer_vpn_status_first: vpn {vname} not configured for site {site_id}')
             return
 
-        remote_vpn=self.node.sites[site_id].vpn[vpn_id]
+        remote_vpn=self.node.sites[site_id].vpn[vname]
         previous_status=remote_vpn.status
 
         remote_vpn.status=status
 
-        #self.logger.debug(f'peer_vpn_status_first({vpn_id}@{site_id}): {status}')
+        #self.logger.debug(f'peer_vpn_status_first({vname}@{site_id}): {status}')
 
 
         # no state change is needed if this status is already recorded
         if status == previous_status:
             return
 
-        self.logger.info(f'peer_vpn_status_first({vpn_id}@{site_id}): {previous_status} -> {status}')
+        self.logger.info(f'peer_vpn_status_first({vname}@{site_id}): {previous_status} -> {status}')
 
-        peer_vpn_status_second.instance.add(site_id, vpn_id, status, previous_status)
+        peer_vpn_status_second.instance.add(site_id, vname, status, previous_status)
 
 
 class peer_vpn_status_second(processor):
-    async def handler(self, site_id : str, vpn_id : str, status : vpn_status_t, previous_status : vpn_status_t):
+    async def handler(self, site_id : str, vname : str, status : vpn_status_t, previous_status : vpn_status_t):
         vs=vpn_status_t
-        rp=self.node.replica_priority[vpn_id]
+        if vname in self.node.replica_priority:
+            rp=self.node.replica_priority[vname]
+        else:
+            rp=None
 
         # if a VPN is unavailable, check the replica list to see if we need to take any
         # action (failover)
         match (previous_status, status):
             case (vs.Online, vs.Failed) | (vs.Pending, vs.Failed) | (_, vs.Offline):
+
+                if rp is None:
+                    self.logger.info(f'peer_vpn_status_second({vname}@{site_id}): peer status Offline: VPN not present in replica_priority, discarding this update')
+                    return
 
                 # come online if the offline self.node is directly above us, including when the the self.node is last
                 # in the list and we are first
@@ -119,43 +126,43 @@ class peer_vpn_status_second(processor):
                     # observed behavior
 
                     # among other things, _replica_distance will check that we are in Replica state
-                    rd=self.node._replica_distance(site_id, self.node.site_id, vpn_id)
-                    self.logger.info(f'peer_vpn_status_second({vpn_id}@{site_id}): peer status Offline: rd={rd}')
+                    rd=self.node._replica_distance(site_id, self.node.site_id, vname)
+                    self.logger.info(f'peer_vpn_status_second({vname}@{site_id}): peer status Offline: rd={rd}')
 
                     (d, rp)=rd
                         
                     #condition=\
                     #    d == 1 or \
-                    #    (self.node.replica_priority[vpn_id][0] == self.node.site_id and self.node.replica_priority[vpn_id][-1] == site_id)
+                    #    (self.node.replica_priority[vname][0] == self.node.site_id and self.node.replica_priority[vname][-1] == site_id)
 
-                    if self.node._local_vpn_obj(vpn_id).status == vpn_status_t.Replica:
+                    if self.node._local_vpn_obj(vname).status == vpn_status_t.Replica:
                         if d == 1 or len(rp) == 0:
-                            await self.node.vpn_online(vpn_id)
+                            await self.node.vpn_online(vname)
                             return
                 else:
-                    self.logger.info(f'peer_vpn_status_second({vpn_id}@{site_id}): peer status Offline: local site not configured as Replica (skipping) (rp={rp})')
+                    self.logger.info(f'peer_vpn_status_second({vname}@{site_id}): peer status Offline: local site not configured as Replica (skipping) (rp={rp})')
 
             case (_, vs.Online):
 
-                #d=self.node._replica_distance(site_id, self.node.site_id, vpn_id)
-                #self.logger.info(f'peer_vpn_status_second({vpn_id}@{site_id}): peer status Online: replica distance is {d}')
+                #d=self.node._replica_distance(site_id, self.node.site_id, vname)
+                #self.logger.info(f'peer_vpn_status_second({vname}@{site_id}): peer status Online: replica distance is {d}')
 
                 #if d is None:
-                #    self.logger.info(f'peer_vpn_status_second({vpn_id}@{site_id}): replica_priority={self.node.replica_priority[vpn_id]}')
+                #    self.logger.info(f'peer_vpn_status_second({vname}@{site_id}): replica_priority={self.node.replica_priority[vname]}')
                 #    return
 
                 # Pending -> Replica (or Offline)
                 # Online -> Replica (or Offline)
-                if (vpn := self.node.get_local_vpn(vpn_id)) is not None and vpn.status in \
+                if (vpn := self.node.get_local_vpn(vname)) is not None and vpn.status in \
                     [ vs.Pending, vs.Online ]:
 
                     if self.node.replica_mode != replica_mode_t.Disabled:
                         # currently, transition to Replica regardless of whether we are higher in the replica list
                         # this enables us to also manually bring a VPN to the Online state elsewhere
 
-                        await self.node.vpn_offline(vpn_id, True, vs.Replica)
+                        await self.node.vpn_offline(vname, True, vs.Replica)
                     else:
-                        await self.node.vpn_offline(vpn_id, True, vs.Offline)
+                        await self.node.vpn_offline(vname, True, vs.Offline)
                 else:
                     return
 
@@ -169,7 +176,7 @@ class peer_vpn_status_second(processor):
 
             # illegal transitions
             case (vs.Replica, vs.Failed) | (vs.Offline, vs.Failed):
-                self.logger.warning(f'peer_vpn_status_second({vpn_id}@{site_id}): illegal transition or missed a transition')
+                self.logger.warning(f'peer_vpn_status_second({vname}@{site_id}): illegal transition or missed a transition')
 
             case _:
                 raise ValueError()

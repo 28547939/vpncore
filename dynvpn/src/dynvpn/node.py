@@ -570,7 +570,7 @@ class node():
         site_state_restrict : List[vpn_status_t] = [site_status_t.Online],
         vpn_state_restrict : List[vpn_status_t] = [vpn_status_t.Replica]
     ) -> Optional[int]:
-        rp=self._replica_eligible(vname, site_state_restrict, vpn_state_restrict)
+        rp=self._find_sites(vname, vpn_state_restrict, site_state_restrict)
         
         if vname in self.replica_priority:
             rp=self.replica_priority[vname]
@@ -619,6 +619,7 @@ class node():
 
             if \
                 self.sites[site_id].status == site_status_t.Online and \
+                vname in self.sites[site_id].vpn and \
                 self.sites[site_id].vpn[vname].status == vpn_status_t.Replica and \
                 ( 
                     self.sites[site_id].status in site_state_restrict
@@ -727,7 +728,7 @@ class node():
         #  
         # note that we are able to check for replicas, and restart, even if we are not configured for replicas
         #   for this VPN
-        if len(self.find_sites(vname, [ vs.Replica, vs.Online ])):
+        if len(self._find_sites(vname, [ vs.Replica, vs.Online ])) == 0:
             await self._set_local_vpn_offline(vname, remove_route=False)
 
             self._logger.warning(f'vpn_online({vname}): failed but no peers in Replica or Online state - retrying')
