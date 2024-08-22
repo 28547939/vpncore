@@ -112,17 +112,8 @@ vpn_jail:
 ##############################
 ######## output
 
-# currently all output is sent to stdout 
-
-# write errors to a specific file 
-# XXX not yet implemented
-#errorlog_file: '/home/vpndns/vpndns.log'
-
-# these two options concern both error and non-error output
-# XXX not yet implemented
-#output_pipe: '/home/vpndns/vpndns.fifo'
-
-# for now should always be true
+# a separate mechanism can be used to wrap this program and direct its output to a log file and/or syslog
+# if desired
 #output_stdout: true
 #output_stderr: true
 

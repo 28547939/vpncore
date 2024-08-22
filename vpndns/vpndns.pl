@@ -46,11 +46,6 @@ sub start {
 
                 $k->alias_set('log');
 
-                if (defined $config{output_pipe}) {
-# TODO not yet implemented
-#                    push $h->{output_fh}, 
-                } 
-                
                 if (defined $config{output_stdout} && $config{output_stdout} == 1) {
                     push @{ $h->{output_fh} }, \*STDOUT;
                 }
@@ -1067,6 +1062,22 @@ sub ttl_timeout {
 }
 
 
+sub build_refused {
+    my ($query_pkt, $context) = @_;
+    my ($q) = $query_pkt->question;
+
+    my $pkt = $query_pkt->reply;
+    $pkt->header->rcode('REFUSED');
+
+    return {
+        host     => $q->qname,
+        type     => $q->qtype,
+        class    => $q->qclass,
+        context  => $context,
+        response => $pkt,
+        error    => "",
+    };
+}
 
 sub build_nxdomain {
     my ($query_pkt, $context) = @_;
@@ -1122,6 +1133,7 @@ sub dns_query {
         return;
     }
 
+
     my $context = {
         af        => $query_pkt->answerfrom,
         id        => $query_pkt->header->id,
@@ -1130,6 +1142,11 @@ sub dns_query {
         ns        => undef,
         qname    => $q->qname,
     };
+
+    if ($q->qtype eq 'DNSKEY') {
+        EL sprintf('responding with REFUSED to DNSKEY request from %s', $ip);
+        $k->yield('send_response', &build_refused($query_pkt, $context));
+    }
 
     # for requests for domains in static_records, respond to requests which aren't A or PTR with empty data
     # RFC7719 section 3
