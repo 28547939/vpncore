@@ -9,6 +9,8 @@ DEFAULTROUTE=$2
 CONFIG_DIR=$3
 
 jexec $NAME route add 192.168.0.0/16 $DEFAULTROUTE
+jexec $NAME route add 10.0.0.0/8 $DEFAULTROUTE
+jexec $NAME route add 172.16.0.0/12 $DEFAULTROUTE
 
 for dir in $CONFIG_DIR/* ; do
     #echo $dir
