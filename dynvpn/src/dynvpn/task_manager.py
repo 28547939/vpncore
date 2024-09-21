@@ -5,6 +5,7 @@ import traceback
 from typing import Coroutine,  List, Callable, Awaitable
 
 from dataclasses import dataclass
+
 import logging
 
 @dataclass
@@ -18,15 +19,17 @@ class task_wrapper():
 
 class task_manager():
 
-    def __init__(self, logger : logging.Logger): 
+    def __init__(self, node, logger : logging.Logger): 
 
         # keep the list of task names separately to avoid dict iterator invalidation
         # they are kept consistent, and we iterate over the list
         self.tasks_dict=dict()
         self.tasks_list=list()
 
-        self._logger=logger
+        # TODO when tasks are redesigned this reference to the node class will not be necessary
+        self.node = node
 
+        self._logger=logger
 
 
     """
@@ -78,6 +81,16 @@ class task_manager():
                 self.tasks_list.remove(tname) 
                 del self.tasks_dict[tname]
 
+                # for now, manually check each VPN lock to see if this task locked it
+                # later, this will be improved when we contain each task in a unified "dynvpn_task"
+                # class that provides access to context. contextvars.Context does not appear to be 
+                # satisfactory for our use case
+                for _, site in self.node.sites.items():
+                    for _, vpn in site.vpn.items():
+                        if vpn.lock is not None and vpn.lock.locked_task == tname:
+                            vpn.lock.unlock(force=True)
+
+
                 exited_noexc=True
 
             return exited_noexc
@@ -95,8 +108,10 @@ class task_manager():
     """
     def add(self, f : Coroutine, tname) -> Coroutine:
         task=asyncio.create_task(f, name=tname)
+
         wait_task=asyncio.create_task(self._handle(task), name=f'{tname}_wait-task')
         #self._logger.debug(f'task_manager.add: created task {tname} id={id(task)} waiter task id={id(wait_task)}')
+
         tobj=task_wrapper(
             wait_task=wait_task,
             task=task

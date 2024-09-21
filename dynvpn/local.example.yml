@@ -34,6 +34,14 @@ local_vpn_dir: "/mnt/vpn"
 # if set to 0, we never attempt to transition to Offline
 failed_status_timeout: 0
 
+# when a VPN is detected as having lost connectivity, retry this many times before giving
+# up and switching it to Failed status
+# "retry" means killing the existing VPN process and starting a new one
+#
+# 0 means no retries (go to Failed immediately)
+# -1 means unlimited retries
+failure_retries: 2
+
 
 # when bringing a VPN connection online, the delay in seconds to wait before 
 # checking whether it succeeded

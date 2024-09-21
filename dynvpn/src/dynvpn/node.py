@@ -73,7 +73,9 @@ class node():
         self.local_config = local_config
         self.global_config = global_config
 
-        self.task_manager=task_manager(self._logger)
+        # for now, pass node object into task_manager
+        # later, a custom task class which has access to relevant state
+        self.task_manager=task_manager(self, self._logger)
 
         self.processors=dict()
 
@@ -291,10 +293,11 @@ class node():
                 result=await self.check_local_vpn_connectivity(vname)
 
                 if result == False:
-                    self._logger.info(f'check_vpn_task({vname}): failure detected, setting Failed status and exiting')
+                    self._logger.info(f'check_vpn_task({vname}): failure detected, initiating retries')
+                    
                     self.task_manager.add(
-                        self.handle_local_failure(vname),
-                        f'handle_local_failure({vname})'
+                        self.failure_retry(vname, retries=self.local_config['failure_retries']),
+                        f'failure_retry({vname})'
                     )
                     return
 
@@ -323,6 +326,15 @@ class node():
             if self.get_local_vpn(vname).status == vs.Online:
                 self._logger.error(f'vpn_offline({vname}): could not find check-vpn task')
             return False
+
+    """
+    """
+    def stop_retries(self, vname : str):
+        ts=self.task_manager.list()
+        for tname in ts:
+            if tname.startswith(f'failure_retry({vname})') and tname != asyncio.current_task().get_name():
+                t = self.task_manager.find(tname)
+                t.cancel()
 
 
     def get_local_vpn(self, vname : str):
@@ -403,13 +415,12 @@ class node():
         treated as a failure, so the timeout (currently set by default_timeout) should be high enough 
         to avoid accidentally prematurely shutting down a VPN connection which was just taking time 
         to start 
-    
-    TODO - possibly encapsulate every major operation like this in a separate class with timeout and
-    failure handling, and cleanup
-    -> may be necessary: right now, timeout_wrap is not aware of the locks used by vpn_online, which 
-        should be unlocked on timeout
+
+    TODO custom task class that handles timeouts and provides locks and other state
     """
-    async def vpn_online(self, vname : str, broadcast : bool = True, timeout_throw=True, lock=True):
+    async def vpn_online(self, vname : str, broadcast : bool = True, timeout_throw=True, lock=True, retries=0):
+
+        self.stop_retries(vname)
 
         L=self.get_local_vpn(vname).lock
         if lock == True:
@@ -418,7 +429,7 @@ class node():
 
 
         try:
-            success=await self._vpn_online_impl(vname, broadcast, timeout_throw=True)
+            success=await self._vpn_online_impl(vname, broadcast, timeout_throw=True, retries=retries)
             #if L.locked():
             if lock == True:
                 L.unlock()
@@ -437,13 +448,7 @@ class node():
                 raise
             return False
         
-    """
-    this timeout includes any necessary calls to handle_local_failure, which will essentially retry
-    vpn_online again, and so on. that recursion, between vpn_online and handle_local_failure, is still
-    controlled by the outermost timeout (this one)
-    """
-    @timeout_wrap
-    async def _vpn_online_impl(self, vname : str, broadcast : bool = True) -> Optional[bool]:
+    async def _vpn_online_impl(self, vname : str, broadcast : bool = True, retries=0) -> Optional[bool]:
         vs=vpn_status_t
 
         #self._logger.info(f'vpn_online({vname}): status={self.get_local_vpn(vname).status}')
@@ -480,7 +485,14 @@ class node():
             # begin periodic online check for this VPN
             await self.start_check_vpn_task(vname)
         else:
-            await self.handle_local_failure(vname, broadcast=broadcast)
+
+            # scheduling it as a separate task allows us to apply our timeout (TODO) to each retry
+            # separately, and also gives an opportunity for another task to acquire the lock
+            self.task_manager.add(
+                # retries is decremented in failure_retry
+                self.failure_retry(vname, broadcast=broadcast, retries=retries),
+                f'failure_retry({vname}) retries={retries}'
+            )
 
         return success
 
@@ -490,6 +502,8 @@ class node():
 
     async def vpn_offline(self, vname : str, broadcast : bool = True, lock=True):
         vs=vpn_status_t
+
+        self.stop_retries(vname)
 
         L=self.get_local_vpn(vname).lock
         if lock == True:
@@ -508,6 +522,8 @@ class node():
 
     async def vpn_replica(self, vname : str, broadcast : bool = True, lock=True) -> bool:
         vs=vpn_status_t
+
+        self.stop_retries(vname)
 
         L=self.get_local_vpn(vname).lock
         if lock == True:
@@ -714,27 +730,41 @@ class node():
                 pass
 
     """
-    called when we attempt to bring a VPN online but fail (Pending -> Failed), or
-    when an online VPN fails (Online -> Failed)
 
-    failure doesn't stop the check-vpn task, which 
     """
-    async def handle_local_failure(self, vname : str, broadcast=True):
+    async def failure_retry(self, vname : str, broadcast=True, retries=0):
         vs=vpn_status_t
-        await self._set_status(vname, vpn_status_t.Failed, broadcast=broadcast)
+        vpn = self.get_local_vpn(vname)
 
-        # restart immediately if there are no other available sites with that VPN in Replica (or Online) state
-        # in theory there should not any others in Online state - but if there is, we don't need to restart
+        await vpn.lock.lock()
+        # fragile, but good enough for now
+        if vpn.status not in [ vs.Online, vs.Pending ]:
+            self._logger.debug(f'failure_retry({vname}): aborting since VPN status changed')
+            return
+
+        await self._set_status(vname, vpn_status_t.Pending, broadcast=broadcast)
+
+        # retry immediately if there are no other available sites with that VPN in Replica (or Online) state
+        # in theory there should not any others in Online state - but if there is, we should not restart
         #  
         # note that we are able to check for replicas, and restart, even if we are not configured for replicas
         #   for this VPN
-        if len(self._find_sites(vname, [ vs.Replica, vs.Online ])) == 0:
+        if  len(self._find_sites(vname, [ vs.Replica, vs.Online ])) == 0 and retries != 0:
+
+            # TODO: option whether to start retrying forever so long as there are no peers with the VPN available
+
             await self._set_local_vpn_offline(vname, remove_route=False)
 
             self._logger.warning(f'vpn_online({vname}): failed but no peers in Replica or Online state - retrying')
-            await self.vpn_online(vname, timeout_throw=True, broadcast=broadcast)
+            if retries > 0:
+                retries -= 1
 
+            await self.vpn_online(vname, timeout_throw=True, broadcast=broadcast, retries=retries)
+
+        # no more retries available, so enter Failed status 
         else:
+
+            await self._set_status(vname, vpn_status_t.Failed, broadcast=broadcast)
             await self._set_local_vpn_offline(vname, remove_route=True)
             timeout=self.local_config['failed_status_timeout'] \
                 if 'failed_status_timeout' in self.local_config else 0
@@ -744,9 +774,13 @@ class node():
                     # eventually clear our Failed status, since underlying conditions may have changed
                     await asyncio.sleep(timeout)
 
-                    # TODO change check here; right now setting offline right after we set online
-                    # TODO also cancel t his task when we set online or offline
                     for _, site in self.sites.items():
+                        if site.id == self.site_id:
+                            if site.vpn[vname].status != vs.Failed:
+                                return
+                            else:
+                                continue
+
                         if site.vpn[vname].status == vpn_status_t.Online:
                             await self._set_status(vname, vpn_status_t.Offline)
                             return

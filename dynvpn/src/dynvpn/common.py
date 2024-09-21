@@ -92,27 +92,44 @@ class dynvpn_lock():
         self._name=name
         self._logger=logging.getLogger('dynvpn')
 
+    def __hash__(self):
+        return hash(self._name)
+
     def _logtrace(self, method, str):
         self._logger.debug(f'dynvpn_lock[name={self._name}]: {method}: {str}')
 
 
-    async def lock(self):
-        if self._lock.locked() and self.locked_task == (tname := asyncio.current_task().get_name()):
+    async def lock(self, tx=None):
+        tname = asyncio.current_task().get_name()
+        if self._lock.locked() and self.locked_task == tname:
             if self._trace:
                 self._logtrace('lock', f'task {tname} already has the lock')
             return
         else:
+
+            # TODO transactions
+            #if tx is not None and tx == self._tx:
+            #    self._logtrace('lock', f'tx parameter matched')
+            #    return self._tx
+
             if self._trace:
-                self._logtrace('lock', f'task {asyncio.current_task().get_name()} waiting')
+                self._logtrace('lock', f'task {tname} waiting')
             await self._lock.acquire()
             if self._trace:
-                self._logtrace('lock', f'task {asyncio.current_task().get_name()} acquired')
-            self.locked_task = asyncio.current_task().get_name()
+                self._logtrace('lock', f'task {tname} acquired')
+            self.locked_task = tname
 
-    def unlock(self):
+            #return self._tx
+
+
+    """
+    `force` argument intended to be used by the task_manager when a task exits without unlocking
+    some locks
+    """
+    def unlock(self, force=False):
         if self._lock.locked():
             tname=asyncio.current_task().get_name()
-            if self.locked_task != tname:
+            if self.locked_task != tname and force != True:
                 raise Exception(
                     f'dynvpn_lock.unlock: current task {tname} cannot '
                     + f'unlock lock, locked by {self.locked_task}'
@@ -123,6 +140,7 @@ class dynvpn_lock():
 
                 self.locked_task=None
                 self._lock.release()
+
 
     def locked(self):
         return self._lock.locked()
