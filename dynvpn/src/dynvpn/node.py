@@ -772,16 +772,20 @@ class node():
             if timeout > 0:
                 while True:
                     # eventually clear our Failed status, since underlying conditions may have changed
+                    # currently we only do this if a peer has brought the VPN online 
                     await asyncio.sleep(timeout)
 
                     for _, site in self.sites.items():
                         if site.id == self.site_id:
+                            # this should not happen; if it's manually set to Online or Offline locally while we were 
+                            # sleeping, our task would have been canceled
                             if site.vpn[vname].status != vs.Failed:
+                                self._logger.warning('failure_retry({vname}): status changed to {site.vpn[vname].status}')
                                 return
                             else:
                                 continue
 
-                        if site.vpn[vname].status == vpn_status_t.Online:
+                        if vname in site.vpn and site.vpn[vname].status == vpn_status_t.Online:
                             await self._set_status(vname, vpn_status_t.Offline)
                             return
 
