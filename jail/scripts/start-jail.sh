@@ -5,7 +5,7 @@ set -x
 
 export VPN_ID=$1
 
-export BASE=$(dirname $0)/..
+export BASE=$(dirname $(realpath $0))/..
 . $BASE/scripts/common.sh
 
 # main entry point - all scripts either inherit our environment, or 

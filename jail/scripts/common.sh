@@ -4,9 +4,7 @@ set -o nounset
 
 # functionality used both inside and outside the jail
 
-# TODO this doesn't work if the highest-level calling script is 
-# not in our directory
-. $(dirname $0)/../etc/vars.sh
+. $(dirname $(realpath $0))/../etc/vars.sh
 
 export DYN_BASE=$ZFS_BASE/base
 
