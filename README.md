@@ -38,7 +38,8 @@ all three components (`vpndns`, `dynvpn`, and VPN jail/container setup).
 
 `dynvpn` demo
 
-[vpncore.webm](https://github.com/user-attachments/assets/222739db-e444-46e7-ae5f-dbdf2ba45612)
+[vpncore-1.webm](https://github.com/user-attachments/assets/b62d35ba-8f0a-4b2f-a776-fd28e1993bfb)
+
 
 
 #### Note on VPN containers
