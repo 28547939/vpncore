@@ -128,8 +128,9 @@ class task_manager():
         try:
             return self.tasks_dict[tname].task
         except KeyError:
+            if tname in self.tasks_list:
+                self._logger.error(f'task_manager.find({tname}): inconsistent state: dict={self.tasks_dict.keys()} list={self.tasks_list}')
             return None
-            #self._logger.error(f'task_manager.get called on non-existent task {tname}')
 
 
     """

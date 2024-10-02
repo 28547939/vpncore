@@ -432,7 +432,7 @@ class node():
 
 
         try:
-            success=await self._vpn_online_impl(vname, broadcast, timeout_throw=True, retries=retries)
+            success=await self._vpn_online_impl(vname, broadcast, retries=retries)
             #if L.locked():
             if lock == True:
                 L.unlock()
@@ -532,6 +532,10 @@ class node():
         if lock == True:
             self._logger.debug(f'vpn_replica({vname}): locking')
             await L.lock()
+
+            # check again for the failure_retry task, which may have been queued
+            # while we waited for the lock
+            self.stop_retries(vname)
 
         if self._replica_configured(vname):
             await self.stop_check_vpn_task(vname)
@@ -639,7 +643,6 @@ class node():
             if \
                 self.sites[site_id].status == site_status_t.Online and \
                 vname in self.sites[site_id].vpn and \
-                self.sites[site_id].vpn[vname].status == vpn_status_t.Replica and \
                 ( 
                     self.sites[site_id].status in site_state_restrict
                         if len(site_state_restrict) > 0
@@ -747,50 +750,64 @@ class node():
 
         await self._set_status(vname, vpn_status_t.Pending, broadcast=broadcast)
 
-        # retry immediately if there are no other available sites with that VPN in Replica (or Online) state
+        # retry immediately if there are no other available sites with that VPN in Online state
         # in theory there should not any others in Online state - but if there is, we should not restart
-        #  
-        # note that we are able to check for replicas, and restart, even if we are not configured for replicas
-        #   for this VPN
-        if  len(self._find_sites(vname, [ vs.Replica, vs.Online ])) == 0 and retries != 0:
+        if len(self._find_sites(vname, [ vs.Online ])) == 0:
+            self._logger.warning(f'vpn_online({vname}): no peers in Online state - retrying')
 
-            # TODO: option whether to start retrying forever so long as there are no peers with the VPN available
+            if retries == 0:
+                # retries exhausted - notify network 
+                await self._set_status(vname, vpn_status_t.Failed, broadcast=broadcast)
 
-            await self._set_local_vpn_offline(vname, remove_route=False)
+            # retry if we still have retries remaining, OR retry indefinitely if there are no replicas available
+            if len(self._find_sites(vname, [ vs.Replica ])) == 0 or retries > 0:
+                # remove_route=False - we are still retrying
+                await self._set_local_vpn_offline(vname, remove_route=False)
 
-            self._logger.warning(f'vpn_online({vname}): failed but no peers in Replica or Online state - retrying')
-            if retries > 0:
-                retries -= 1
+                if retries > 0:
+                    retries -= 1
 
-            await self.vpn_online(vname, timeout_throw=True, broadcast=broadcast, retries=retries)
+                await self.vpn_online(vname, timeout_throw=True, broadcast=broadcast, retries=retries)
+                # return here to ensure we don't proceed to the failure timeout code yet
+                return
 
-        # no more retries available, so enter Failed status 
-        else:
 
-            await self._set_status(vname, vpn_status_t.Failed, broadcast=broadcast)
-            await self._set_local_vpn_offline(vname, remove_route=True)
-            timeout=self.local_config['failed_status_timeout'] \
-                if 'failed_status_timeout' in self.local_config else 0
+        # failure timeout 
+        # we reach here if we learned of a peer in Replica or Online state during our retries
 
-            if timeout > 0:
-                while True:
-                    # eventually clear our Failed status, since underlying conditions may have changed
-                    # currently we only do this if a peer has brought the VPN online 
-                    await asyncio.sleep(timeout)
+        # (re-)enter Failed status, eventually transition to Replica or Offline depending on replica mode
+        await self._set_status(vname, vpn_status_t.Failed, broadcast=broadcast)
+        await self._set_local_vpn_offline(vname, remove_route=True)
+        timeout=self.local_config['failed_status_timeout'] \
+            if 'failed_status_timeout' in self.local_config else 0
 
-                    for _, site in self.sites.items():
-                        if site.id == self.site_id:
-                            # this should not happen; if it's manually set to Online or Offline locally while we were 
-                            # sleeping, our task would have been canceled
-                            if site.vpn[vname].status != vs.Failed:
-                                self._logger.warning('failure_retry({vname}): status changed to {site.vpn[vname].status}')
-                                return
-                            else:
-                                continue
+        if timeout > 0:
+            while True:
+                # eventually clear our Failed status, since underlying conditions may have changed
+                # currently we only do this if a peer has brought the VPN online 
+                await asyncio.sleep(timeout)
 
-                        if vname in site.vpn and site.vpn[vname].status == vpn_status_t.Online:
-                            await self._set_status(vname, vpn_status_t.Offline)
+                for _, site in self.sites.items():
+                    if site.id == self.site_id:
+                        # this should not happen; if it's manually set to Online or Offline locally while we were 
+                        # sleeping, our task would have been canceled
+                        if site.vpn[vname].status != vs.Failed:
+                            self._logger.warning('failure_retry({vname}): status changed to {site.vpn[vname].status}')
                             return
+                        else:
+                            continue
+
+                    if vname in site.vpn and site.vpn[vname].status == vpn_status_t.Online:
+                        if self.replica_mode == replica_mode_t.Auto:
+                            s=vpn_status_t.Replica
+                        
+                        # TODO possibly questionable - if we were in Replica state to begin with, it might
+                        # be best if we return to that
+                        else:
+                            s=vpn_status_t.Offline
+
+                        await self._set_status(vname, s)
+                        return
 
 
 
