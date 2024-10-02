@@ -192,6 +192,14 @@ class node():
                 # offline in case the underlying OpenVPN connection is online
                 await self._set_local_vpn_offline(vname)
 
+        # set to Replica state if replica_mode is Auto and we're configured as a replica; Offline otherwise
+        async def set_replica_or_offline(vname):
+            if self.replica_mode == replica_mode_t.Auto and self._replica_configured(vname):
+                    await self._set_status(vname, vs.Replica, False)
+            else:
+                if self._replica_configured(vname):
+                    self._logger.info(f'replica_mode is Auto, but not configured to be a replica for {vname}')
+                await self._set_status(vname, vs.Offline, False)
 
         # third pass to check any further VPNs detected online earlier, or others where we are first in the replica list
         async def phase3(vname):
@@ -226,19 +234,14 @@ class node():
                     self._logger.info(f'start(): {vname}: peer is already online, stopping our connection')
                     await self._set_local_vpn_offline(vname)
 
-                if self.replica_mode == replica_mode_t.Auto:
-                    await self._set_status(vname, vs.Replica, False)
-                else:
-                    await self._set_status(vname, vs.Offline, False)
+                await set_replica_or_offline(vname)
+
 
         # any remaining local VPNs are set to Replica status (or Offline if replica_mode is not Auto)
         async def phase4(vname):
-            if self.replica_mode == replica_mode_t.Auto:
-                if self.get_local_vpn(vname).status in [ vs.Offline, vs.Pending ]:
-                    await self._set_status(vname, vs.Replica, False)
-            else:
-                if self.get_local_vpn(vname).status == vs.Pending:
-                    await self._set_status(vname, vs.Offline, False)
+
+            if self.get_local_vpn(vname).status in [ vs.Offline, vs.Pending ]:
+                await set_replica_or_offline(vname)
 
         await self.task_manager.iter_add_wait(local_vpns, phase1, 'start-phase1')
 
